@@ -3,7 +3,7 @@
 #
 # A single-file Streamlit application for the Associate Director, AD Operations.
 #
-# VERSION: Final, Unabridged & Fully Populated
+# VERSION: Final, Unabridged & Fully Labeled Visualizations
 #
 # This dashboard provides a real-time, strategic, and scientifically-grounded
 # view of the Analytical Development Operations function. It is designed to manage a
@@ -19,10 +19,10 @@
 #   - ALCOA+ Data Integrity Principles
 #
 # To Run:
-# 1. Save this code as 'ad_ops_final_dashboard.py'
+# 1. Save this code as 'ad_ops_final_labeled_dashboard.py'
 # 2. Create 'requirements.txt' with specified libraries.
 # 3. Install dependencies: pip install -r requirements.txt
-# 4. Run from your terminal: streamlit run ad_ops_final_dashboard.py
+# 4. Run from your terminal: streamlit run ad_ops_final_labeled_dashboard.py
 #
 # ======================================================================================
 
@@ -95,8 +95,16 @@ def plot_rsm_suite(df, x_col, y_col, z_col):
     x_grid, y_grid = np.meshgrid(x, y)
     poly = PolynomialFeatures(degree=2); X_poly = poly.fit_transform(df[[x_col, y_col]]); model = LinearRegression(); model.fit(X_poly, df[z_col])
     X_pred_poly = poly.transform(np.c_[x_grid.ravel(), y_grid.ravel()]); z_grid = model.predict(X_pred_poly).reshape(x_grid.shape)
-    fig_3d = go.Figure(data=[go.Surface(z=z_grid, x=x, y=y, colorscale='Viridis', name='Response Surface', showlegend=True)]); fig_3d.add_trace(go.Scatter3d(x=df[x_col], y=df[y_col], z=df[z_col], mode='markers', marker=dict(size=5, color='red', symbol='circle'), name='DOE Points')); fig_3d.update_layout(title='<b>A. Response Surface (3D View)</b>', scene=dict(xaxis_title=x_col, yaxis_title=y_col, zaxis_title=z_col), margin=dict(l=0, r=0, b=0, t=40))
-    fig_2d = go.Figure(data=go.Contour(z=z_grid, x=x, y=y, colorscale='Viridis', contours_coloring='lines', line_width=2)); fig_2d.add_trace(go.Scatter(x=df[x_col], y=df[y_col], mode='markers', marker=dict(color='black', symbol='x'), name='DOE Points')); fig_2d.add_shape(type="rect", x0=-0.5, y0=-0.7, x1=0.5, y1=0.7, line=dict(color="red", dash="dash"), fillcolor="rgba(255,0,0,0.1)"); fig_2d.add_annotation(x=0, y=0, text="<b>Optimal<br>Region</b>", showarrow=False, font=dict(color="red")); fig_2d.update_layout(title='<b>B. Contour Plot & Design Space (2D View)</b>', xaxis_title=x_col, yaxis_title=y_col)
+    
+    fig_3d = go.Figure(data=[go.Surface(z=z_grid, x=x, y=y, colorscale='Viridis', name='Response Surface', showlegend=True)])
+    fig_3d.add_trace(go.Scatter3d(x=df[x_col], y=df[y_col], z=df[z_col], mode='markers', marker=dict(size=5, color='red', symbol='circle'), name='DOE Points'))
+    fig_3d.update_layout(title='<b>A. Response Surface (3D View)</b>', scene=dict(xaxis_title=f'{x_col}', yaxis_title=f'{y_col} (%/min)', zaxis_title=f'{z_col} (%)'), margin=dict(l=0, r=0, b=0, t=40))
+    
+    fig_2d = go.Figure(data=go.Contour(z=z_grid, x=x, y=y, colorscale='Viridis', contours_coloring='lines', line_width=2))
+    fig_2d.add_trace(go.Scatter(x=df[x_col], y=df[y_col], mode='markers', marker=dict(color='black', symbol='x'), name='DOE Points'))
+    fig_2d.add_shape(type="rect", x0=-0.5, y0=-0.7, x1=0.5, y1=0.7, line=dict(color="red", dash="dash"), fillcolor="rgba(255,0,0,0.1)")
+    fig_2d.add_annotation(x=0, y=0, text="<b>Optimal<br>Region</b>", showarrow=False, font=dict(color="red"))
+    fig_2d.update_layout(title='<b>B. Contour Plot & Design Space (2D View)</b>', xaxis_title=f'{x_col}', yaxis_title=f'{y_col} (%/min)')
     return fig_3d, fig_2d
 
 def plot_enhanced_i_mr_chart(df, value_col):
@@ -108,13 +116,18 @@ def plot_enhanced_i_mr_chart(df, value_col):
     signal_points = individuals.iloc[list(set(signals))]
     fig = go.Figure(); fig.add_trace(go.Scatter(y=individuals, name='Individual Value', mode='lines+markers', line=dict(color='#673ab7'))); fig.add_hline(y=i_mean, line=dict(color='green', dash='dot'), name='Mean'); fig.add_hline(y=i_ucl, line=dict(color='red', dash='dash'), name='UCL')
     outliers = individuals[individuals > i_ucl]; fig.add_trace(go.Scatter(x=outliers.index, y=outliers, mode='markers', name='UCL Violation', marker=dict(symbol='x', color='red', size=12))); fig.add_trace(go.Scatter(x=signal_points.index, y=signal_points, mode='markers', name='Nelson Rule 1 Signal', marker=dict(symbol='diamond', color='orange', size=10)))
-    fig.update_layout(title=f'<b>I-Chart with Nelson Rule Detection: {value_col}</b>', yaxis_title='Value', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+    fig.update_layout(title=f'<b>I-Chart with Nelson Rule Detection: {value_col}</b>', yaxis_title='Titer (vg/mL)', xaxis_title='Data Point Index', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     return fig
 
 def plot_xbar_r_chart(df):
     subgroup_size = df['Replicate'].max(); stats = df.groupby('Subgroup_ID')['Potency_Result'].agg(['mean', 'max', 'min']).reset_index(); stats['range'] = stats['max'] - stats['min']; A2, D3, D4 = 0.577, 0, 2.114; x_bar_bar = stats['mean'].mean(); r_bar = stats['range'].mean(); x_ucl = x_bar_bar + A2 * r_bar; x_lcl = x_bar_bar - A2 * r_bar; r_ucl = r_bar * D4; r_lcl = r_bar * D3
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1, subplot_titles=("X-bar Chart (Process Mean)", "R-Chart (Process Variation)")); fig.add_trace(go.Scatter(x=stats['Subgroup_ID'], y=stats['mean'], name='Subgroup Mean', mode='lines+markers'), row=1, col=1); fig.add_hline(y=x_bar_bar, line=dict(color='green', dash='dot'), name='Center Line', row=1, col=1); fig.add_hline(y=x_ucl, line=dict(color='red', dash='dash'), name='UCL', row=1, col=1); fig.add_hline(y=x_lcl, line=dict(color='red', dash='dash'), name='LCL', row=1, col=1); fig.add_trace(go.Scatter(x=stats['Subgroup_ID'], y=stats['range'], name='Subgroup Range', mode='lines+markers', line_color='orange'), row=2, col=1); fig.add_hline(y=r_bar, line=dict(color='green', dash='dot'), name='Center Line', row=2, col=1); fig.add_hline(y=r_ucl, line=dict(color='red', dash='dash'), name='UCL', row=2, col=1); fig.add_hline(y=r_lcl, line=dict(color='red', dash='dash'), name='LCL', row=2, col=1)
-    fig.update_layout(height=600, title_text="<b>X-bar & R Chart for Subgroup Data (Potency Assay)</b>")
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1, subplot_titles=("X-bar Chart (Process Mean)", "R-Chart (Process Variation)"))
+    fig.add_trace(go.Scatter(x=stats['Subgroup_ID'], y=stats['mean'], name='Subgroup Mean', mode='lines+markers'), row=1, col=1); fig.add_hline(y=x_bar_bar, line=dict(color='green', dash='dot'), name='Center Line', row=1, col=1); fig.add_hline(y=x_ucl, line=dict(color='red', dash='dash'), name='UCL', row=1, col=1); fig.add_hline(y=x_lcl, line=dict(color='red', dash='dash'), name='LCL', row=1, col=1)
+    fig.add_trace(go.Scatter(x=stats['Subgroup_ID'], y=stats['range'], name='Subgroup Range', mode='lines+markers', line_color='orange'), row=2, col=1); fig.add_hline(y=r_bar, line=dict(color='green', dash='dot'), name='Center Line', row=2, col=1); fig.add_hline(y=r_ucl, line=dict(color='red', dash='dash'), name='UCL', row=2, col=1); fig.add_hline(y=r_lcl, line=dict(color='red', dash='dash'), name='LCL', row=2, col=1)
+    fig.update_layout(height=600, title_text="<b>X-bar & R Chart for Subgroup Data (Potency Assay)</b>", showlegend=False)
+    fig.update_yaxes(title_text="Mean Potency (% Activity)", row=1, col=1)
+    fig.update_yaxes(title_text="Range of Potency (% Activity)", row=2, col=1)
+    fig.update_xaxes(title_text="Subgroup ID", row=2, col=1)
     return fig
 
 def plot_p_chart(df):
@@ -127,14 +140,14 @@ def plot_p_chart(df):
 def plot_transfer_risk_waterfall(model, input_df):
     base_value = 0.45; contributions = {'Complexity_Score': (input_df['Complexity_Score'].iloc[0] - 6) * -0.05, 'SOP_Maturity_Score': (input_df['SOP_Maturity_Score'].iloc[0] - 6) * 0.04, 'Training_Cycles': (input_df['Training_Cycles'].iloc[0] - 2) * 0.03}; final_prediction = base_value + sum(contributions.values())
     fig = go.Figure(go.Waterfall(name = "Prediction", orientation = "v", measure = ["relative", "relative", "relative", "total"], x = ["Complexity", "SOP Maturity", "Training", "Final Prediction"], textposition = "outside", text = [f"{v:+.1%}" for v in contributions.values()] + [f"{final_prediction:.1%}"], y = list(contributions.values()) + [final_prediction], connector = {"line":{"color":"rgb(63, 63, 63)"}}, base = base_value))
-    fig.update_layout(title = "<b>Risk Contribution Analysis</b>", yaxis_tickformat=".0%", showlegend=False)
+    fig.update_layout(title = "<b>Risk Contribution Analysis</b>", yaxis_title="Contribution to Success Probability", xaxis_title="Model Feature", yaxis_tickformat=".0%", showlegend=False)
     return fig
 
 def plot_tech_opportunity_matrix(df):
     df['Complexity_Num'] = df['Implementation_Complexity_Score']; avg_impact = df['Est_Throughput_Increase_Factor'].mean(); avg_complexity = df['Complexity_Num'].mean()
     fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Complexity_Num'], y=df['Est_Throughput_Increase_Factor'], mode='markers+text', text=df['Technology'], textposition='top center', marker=dict(size=df['Est_FTE_Saving']*15, color=df['Targeted_Process'].astype('category').cat.codes, colorscale='viridis', showscale=False), hovertext=df['Targeted_Process'], name='Technologies'))
     fig.add_vline(x=avg_complexity, line_width=1, line_dash="dash", line_color="grey"); fig.add_hline(y=avg_impact, line_width=1, line_dash="dash", line_color="grey")
-    fig.update_layout(title='<b>Technology Opportunity Prioritization Matrix</b>', xaxis_title='Implementation Complexity (Lower is Better)', yaxis_title='Throughput Increase (Factor)')
+    fig.update_layout(title='<b>Technology Opportunity Prioritization Matrix</b>', xaxis_title='Implementation Complexity (Score)', yaxis_title='Throughput Increase (x-fold)')
     fig.add_annotation(x=avg_complexity*0.9, y=avg_impact*1.1, text="<b>🔥 QUICK WINS 🔥</b>", showarrow=False, font=dict(color="#2e7d32", size=14)); fig.add_annotation(x=avg_complexity*1.1, y=avg_impact*1.1, text="<b>STRATEGIC BETS</b>", showarrow=False, font=dict(color="#2962ff")); fig.add_annotation(x=avg_complexity*0.9, y=avg_impact*0.9, text="<b>INCREMENTAL</b>", showarrow=False, font=dict(color="#ffc107")); fig.add_annotation(x=avg_complexity*1.1, y=avg_impact*0.9, text="<b>LUXURY</b>", showarrow=False, font=dict(color="grey"))
     return fig
 
@@ -217,7 +230,8 @@ with tab3:
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("A. Sample Testing Capacity vs. Demand")
-        st.plotly_chart(go.Figure(data=[go.Bar(name='Samples Tested', x=sample_df['Week'], y=sample_df['Samples_Tested']), go.Bar(name='Backlog Growth', x=sample_df['Week'], y=sample_df['Samples_Received'] - sample_df['Samples_Tested']), go.Scatter(name='Cumulative Backlog', x=sample_df['Week'], y=sample_df['Backlog'], yaxis='y2')]).update_layout(barmode='stack', title='<b>Weekly Sample Flow & Cumulative Backlog</b>', yaxis2=dict(title='Total Backlog', overlaying='y', side='right')), use_container_width=True)
+        fig = go.Figure(data=[go.Bar(name='Samples Tested', x=sample_df['Week'], y=sample_df['Samples_Tested']), go.Bar(name='Backlog Growth', x=sample_df['Week'], y=sample_df['Samples_Received'] - sample_df['Samples_Tested']), go.Scatter(name='Cumulative Backlog', x=sample_df['Week'], y=sample_df['Backlog'], yaxis='y2')]).update_layout(barmode='stack', title='<b>Weekly Sample Flow & Cumulative Backlog</b>', xaxis_title='Week', yaxis_title='Weekly Sample Count', yaxis2=dict(title='Total Backlog (Count)', overlaying='y', side='right'))
+        st.plotly_chart(fig, use_container_width=True)
     with col2:
         st.subheader("B. Critical Equipment Status")
         for _, row in equipment_df.iterrows():
@@ -251,37 +265,14 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("### Applicable Regulatory Frameworks")
 with st.sidebar.expander("View Key GxP and ISO Regulations", expanded=False):
     st.markdown("""
-    **ICH Q2(R1) - Validation of Analytical Procedures**
-    - The core guideline defining validation characteristics.
-    - *"...specificity, linearity, range, accuracy, precision (repeatability, intermediate precision), detection limit, quantitation limit, robustness."*
-
-    **ICH Q8(R2) - Pharmaceutical Development**
-    - Introduces Quality by Design (QbD) concepts.
-    - *"The aim of pharmaceutical development is to design a quality product and its manufacturing process to consistently deliver the intended performance..."*
-    
-    **ICH Q9 - Quality Risk Management**
-    - The framework for risk-based decision-making.
-    - *"The evaluation of the risk to quality should be based on scientific knowledge and ultimately link to the protection of the patient."*
-
-    **ICH Q14 - Analytical Procedure Development**
-    - Formalizes the lifecycle and QbD approach for methods.
-    - *"This guideline describes science and risk-based approaches for developing and maintaining analytical procedures suitable for the assessment of the quality of drug substances and drug products."*
-
-    **21 CFR Part 211 - cGMP for Finished Pharmaceuticals**
-    - US FDA's enforceable regulations for manufacturing and testing.
-    - *§211.165(e): "The accuracy, sensitivity, specificity, and reproducibility of test methods employed by the firm shall be established and documented."*
-    
-    **21 CFR Part 11 - Electronic Records; Electronic Signatures**
-    - Governs data integrity for all computerized lab systems (LIMS, ELN, CDS).
-    - *"Applicability to records in electronic form that are created, modified, maintained, archived, retrieved, or transmitted, under any records requirements..."*
-
-    **EudraLex Vol. 4, Ch 6 - Quality Control**
-    - The EMA's GMP requirements for QC laboratories.
-    - *"Test methods should be validated... before they are brought into routine use."*
-
-    **ISO 17025:2017 - General requirements for the competence of testing and calibration laboratories**
-    - The international standard for laboratory quality management.
-    - *"The laboratory shall be responsible for the impartiality of its laboratory activities and shall not allow... pressures to compromise impartiality."*
+    **ICH Q2(R1) - Validation of Analytical Procedures**\n*"...specificity, linearity, range, accuracy, precision (repeatability, intermediate precision), detection limit, quantitation limit, robustness."*
+    \n**ICH Q8(R2) - Pharmaceutical Development**\n*"The aim of pharmaceutical development is to design a quality product and its manufacturing process to consistently deliver the intended performance..."*
+    \n**ICH Q9 - Quality Risk Management**\n*"The evaluation of the risk to quality should be based on scientific knowledge and ultimately link to the protection of the patient."*
+    \n**ICH Q14 - Analytical Procedure Development**\n*"This guideline describes science and risk-based approaches for developing and maintaining analytical procedures..."*
+    \n**21 CFR Part 211 - cGMP for Finished Pharmaceuticals**\n*§211.165(e): "The accuracy, sensitivity, specificity, and reproducibility of test methods... shall be established and documented."*
+    \n**21 CFR Part 11 - Electronic Records; Electronic Signatures**\n*"Applicability to records in electronic form that are created, modified, maintained, archived, retrieved, or transmitted..."*
+    \n**EudraLex Vol. 4, Ch 6 - Quality Control**\n*"Test methods should be validated... before they are brought into routine use."*
+    \n**ISO 17025:2017 - General requirements for the competence of testing and calibration laboratories**\n*"The laboratory shall be responsible for the impartiality of its laboratory activities..."*
     """)
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Key Scientific Concepts")
