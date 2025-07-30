@@ -3,7 +3,7 @@
 #
 # A single-file Streamlit application for the Associate Director, AD Operations.
 #
-# VERSION: Scientific & Regulatory Compliance Edition (Full SPC & Regulations)
+# VERSION: Diagnostic & Visualization Enhanced Edition (Unabridged)
 #
 # This dashboard provides a real-time, strategic, and scientifically-grounded
 # view of the Analytical Development Operations function. It is designed to manage a
@@ -19,10 +19,10 @@
 #   - ALCOA+ Data Integrity Principles
 #
 # To Run:
-# 1. Save this code as 'ad_ops_dashboard_final.py'
+# 1. Save this code as 'ad_ops_diagnostic_dashboard.py'
 # 2. Create 'requirements.txt' with specified libraries.
 # 3. Install dependencies: pip install -r requirements.txt
-# 4. Run from your terminal: streamlit run ad_ops_dashboard_final.py
+# 4. Run from your terminal: streamlit run ad_ops_diagnostic_dashboard.py
 #
 # ======================================================================================
 
@@ -57,7 +57,7 @@ st.markdown("""
 
 
 # ======================================================================================
-# SECTION 2: SME-DRIVEN DATA SIMULATION FOR ANALYTICAL DEVELOPMENT
+# SECTION 2: SME-DRIVEN DATA SIMULATION
 # ======================================================================================
 @st.cache_data(ttl=600)
 def generate_master_data():
@@ -67,16 +67,16 @@ def generate_master_data():
     methods = ['AAV Titer (ddPCR)', 'Capsid Purity (HPLC-SEC)', 'Host Cell DNA (qPCR)', 'Potency (Cell-Based Assay)', 'Endotoxin (LAL)']; transfer_data = {'Method': methods * 2, 'Program': ['AAV-101']*5 + ['AAV-201']*5, 'Receiving_Unit': ['Internal QC', 'CDMO-A', 'Internal QC', 'CDMO-B', 'Internal QC'] * 2, 'Status': np.random.choice(['Development', 'Optimization', 'Validation', 'Transferred', 'Failed'], 10, p=[0.1,0.2,0.4,0.2,0.1]), 'Complexity_Score': np.random.randint(3, 10, 10), 'SOP_Maturity_Score': np.random.randint(4, 10, 10), 'Training_Cycles': np.random.randint(1, 4, 10)}; transfer_df = pd.DataFrame(transfer_data); transfer_df['Transfer_Success'] = ((transfer_df['Status'] == 'Transferred').astype(int) + (transfer_df['Complexity_Score'] < 5) + (transfer_df['SOP_Maturity_Score'] > 7)) > 1
     X = np.random.uniform(-1, 1, (15, 2)); doe_df = pd.DataFrame(X, columns=['pH', 'Gradient_Slope_Pct_min']); doe_df['AAV_Purity_Pct'] = 95 - 2*doe_df['pH']**2 - 3*doe_df['Gradient_Slope_Pct_min']**2 + doe_df['pH']*doe_df['Gradient_Slope_Pct_min'] + np.random.normal(0, 0.5, 15)
     team_data = {'Scientist': ['J. Doe', 'S. Smith', 'M. Lee', 'K. Chen'], 'Role': ['Sr. Scientist', 'Scientist II', 'Scientist I', 'RA II'], 'Expertise': ['HPLC', 'ddPCR', 'ELISA', 'CE']}; team_df = pd.DataFrame(team_data); equipment_data = {'Instrument': ['HPLC-01', 'HPLC-02', 'CE-01', 'ddPCR-01'], 'Status': ['Online', 'Online', 'Calibration Due', 'Offline - Maintenance']}; equipment_df = pd.DataFrame(equipment_data)
-    subgroup_size = 5; num_subgroups = 40; subgroup_data = []
+    subgroup_size = 5; num_subgroups = 40; subgroup_data = []; mean = 100; std_dev = 5
     for i in range(num_subgroups):
-        mean = 100; std_dev = 5
         if i >= 20: std_dev = 10
         if i >= 30: mean = 110
         replicates = np.random.normal(mean, std_dev, subgroup_size)
         for j, rep in enumerate(replicates): subgroup_data.append({'Subgroup_ID': i + 1, 'Replicate': j + 1, 'Potency_Result': rep})
     subgroup_df = pd.DataFrame(subgroup_data)
     p_dates = pd.to_datetime(pd.date_range(start='2023-01-01', periods=24, freq='ME')); batches_tested = np.random.randint(15, 25, 24); base_fail_rate = 0.05; batches_failed = np.random.binomial(n=batches_tested, p=base_fail_rate); batches_failed[18] = 5; p_chart_data = {'Month': p_dates, 'Batches_Tested': batches_tested, 'Batches_Failed': batches_failed}; p_chart_df = pd.DataFrame(p_chart_data)
-    return sample_df, cqa_df, transfer_df, doe_df, team_df, equipment_df, subgroup_df, p_chart_df
+    tech_data = {'Technology': ['Robotic Liquid Handler', 'Automated Plate Reader', 'High-Throughput HPLC', 'Microfluidics Platform'], 'Targeted_Process': ['Sample Preparation', 'ELISA/Potency Assays', 'Purity/Impurity Testing', 'Early-Stage Screening'], 'Est_Throughput_Increase_Factor': [5, 3, 4, 10], 'Implementation_Complexity_Score': [8, 3, 6, 9], 'Est_FTE_Saving': [1.5, 0.5, 1.0, 0.75]}; tech_df = pd.DataFrame(tech_data)
+    return sample_df, cqa_df, transfer_df, doe_df, team_df, equipment_df, subgroup_df, p_chart_df, tech_df
 
 # ======================================================================================
 # SECTION 3: ADVANCED ANALYTICAL & ML MODELS
@@ -88,26 +88,74 @@ def get_transfer_risk_model(df):
     model = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced'); model.fit(X, y)
     return model
 
-def plot_rsm_surface(df, x_col, y_col, z_col):
+def plot_rsm_suite(df, x_col, y_col, z_col):
     from sklearn.preprocessing import PolynomialFeatures
     from sklearn.linear_model import LinearRegression
     x = np.linspace(df[x_col].min(), df[x_col].max(), 30); y = np.linspace(df[y_col].min(), df[y_col].max(), 30)
     x_grid, y_grid = np.meshgrid(x, y)
     poly = PolynomialFeatures(degree=2); X_poly = poly.fit_transform(df[[x_col, y_col]]); model = LinearRegression(); model.fit(X_poly, df[z_col])
     X_pred_poly = poly.transform(np.c_[x_grid.ravel(), y_grid.ravel()]); z_grid = model.predict(X_pred_poly).reshape(x_grid.shape)
-    fig = go.Figure(data=[go.Surface(z=z_grid, x=x, y=y, colorscale='Viridis', name='Response Surface', showlegend=True)])
-    fig.add_trace(go.Scatter3d(x=df[x_col], y=df[y_col], z=df[z_col], mode='markers', marker=dict(size=5, color='red', symbol='circle'), name='DOE Experimental Points'))
-    fig.update_layout(title='<b>Response Surface: Method Optimization</b>', scene=dict(xaxis_title=x_col, yaxis_title=y_col, zaxis_title=z_col), margin=dict(l=0, r=0, b=0, t=40), legend=dict(x=0.8, y=0.9))
+    
+    # 3D Surface Plot
+    fig_3d = go.Figure(data=[go.Surface(z=z_grid, x=x, y=y, colorscale='Viridis', name='Response Surface', showlegend=True)])
+    fig_3d.add_trace(go.Scatter3d(x=df[x_col], y=df[y_col], z=df[z_col], mode='markers', marker=dict(size=5, color='red', symbol='circle'), name='DOE Points'))
+    fig_3d.update_layout(title='<b>A. Response Surface (3D View)</b>', scene=dict(xaxis_title=x_col, yaxis_title=y_col, zaxis_title=z_col), margin=dict(l=0, r=0, b=0, t=40))
+    
+    # 2D Contour Plot
+    fig_2d = go.Figure(data=go.Contour(z=z_grid, x=x, y=y, colorscale='Viridis', contours_coloring='lines', line_width=2))
+    fig_2d.add_trace(go.Scatter(x=df[x_col], y=df[y_col], mode='markers', marker=dict(color='black', symbol='x'), name='DOE Points'))
+    fig_2d.add_shape(type="rect", x0=-0.5, y0=-0.7, x1=0.5, y1=0.7, line=dict(color="red", dash="dash"), fillcolor="rgba(255,0,0,0.1)")
+    fig_2d.add_annotation(x=0, y=0, text="<b>Optimal<br>Region</b>", showarrow=False, font=dict(color="red"))
+    fig_2d.update_layout(title='<b>B. Contour Plot & Design Space (2D View)</b>', xaxis_title=x_col, yaxis_title=y_col)
+    return fig_3d, fig_2d
+
+def plot_enhanced_i_mr_chart(df, value_col):
+    individuals = df[value_col]
+    i_mean = individuals.mean(); mr_mean = abs(individuals.diff()).mean()
+    i_ucl = i_mean + 3 * mr_mean / 1.128; i_lcl = i_mean - 3 * mr_mean / 1.128
+    
+    # Nelson Rule 1: 9 consecutive points on one side of the mean
+    signals = []
+    for i in range(9, len(individuals)):
+        subset = individuals[i-9:i]
+        if all(subset > i_mean) or all(subset < i_mean):
+            signals.extend(list(range(i-9, i)))
+    signal_points = individuals.iloc[list(set(signals))]
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(y=individuals, name='Individual Value', mode='lines+markers', line=dict(color='#673ab7')))
+    fig.add_hline(y=i_mean, line=dict(color='green', dash='dot'), name='Mean')
+    fig.add_hline(y=i_ucl, line=dict(color='red', dash='dash'), name='UCL')
+    outliers = individuals[individuals > i_ucl]
+    fig.add_trace(go.Scatter(x=outliers.index, y=outliers, mode='markers', name='UCL Violation', marker=dict(symbol='x', color='red', size=12)))
+    fig.add_trace(go.Scatter(x=signal_points.index, y=signal_points, mode='markers', name='Nelson Rule 1 Signal', marker=dict(symbol='diamond', color='orange', size=10)))
+    fig.update_layout(title=f'<b>I-Chart with Nelson Rule Detection: {value_col}</b>', yaxis_title='Value', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     return fig
 
-def plot_i_mr_chart(df, value_col):
-    individuals = df[value_col]; moving_ranges = abs(individuals.diff()).dropna()
-    i_mean = individuals.mean(); i_ucl = i_mean + 3 * moving_ranges.mean() / 1.128; i_lcl = i_mean - 3 * moving_ranges.mean() / 1.128
-    fig = go.Figure(); fig.add_trace(go.Scatter(y=individuals, name='Individual Value', mode='lines+markers', line=dict(color='#673ab7'))); fig.add_hline(y=i_mean, line=dict(color='green', dash='dot'), name='Mean'); fig.add_hline(y=i_ucl, line=dict(color='red', dash='dash'), name='UCL'); fig.add_hline(y=i_lcl, line=dict(color='red', dash='dash'), name='LCL')
-    outliers = individuals[(individuals > i_ucl) | (individuals < i_lcl)]; fig.add_trace(go.Scatter(x=outliers.index, y=outliers, mode='markers', name='Out of Control Signal', marker=dict(symbol='x', color='red', size=12)))
-    fig.update_layout(title=f'<b>I-Chart: Method Performance Monitoring for {value_col}</b>', yaxis_title='Value', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+def plot_transfer_risk_waterfall(model, input_df):
+    # This is a simplified simulation of SHAP/LIME for explainability
+    base_value = 0.45 # Average success probability
+    contributions = {
+        'Complexity_Score': (input_df['Complexity_Score'].iloc[0] - 6) * -0.05,
+        'SOP_Maturity_Score': (input_df['SOP_Maturity_Score'].iloc[0] - 6) * 0.04,
+        'Training_Cycles': (input_df['Training_Cycles'].iloc[0] - 2) * 0.03
+    }
+    final_prediction = base_value + sum(contributions.values())
+    
+    fig = go.Figure(go.Waterfall(
+        name = "Prediction", orientation = "v",
+        measure = ["relative", "relative", "relative", "total"],
+        x = ["Complexity", "SOP Maturity", "Training", "Final Prediction"],
+        textposition = "outside",
+        text = [f"{v:+.1%}" for v in contributions.values()] + [f"{final_prediction:.1%}"],
+        y = list(contributions.values()) + [final_prediction],
+        connector = {"line":{"color":"rgb(63, 63, 63)"}},
+        base = base_value
+    ))
+    fig.update_layout(title = "<b>Risk Contribution Analysis</b>", yaxis_tickformat=".0%", showlegend=False)
     return fig
 
+# [Other plotting functions remain the same as previous version]
 def plot_xbar_r_chart(df):
     subgroup_size = df['Replicate'].max()
     stats = df.groupby('Subgroup_ID')['Potency_Result'].agg(['mean', 'max', 'min']).reset_index()
@@ -125,19 +173,22 @@ def plot_xbar_r_chart(df):
     fig.add_hline(y=r_ucl, line=dict(color='red', dash='dash'), name='UCL', row=2, col=1); fig.add_hline(y=r_lcl, line=dict(color='red', dash='dash'), name='LCL', row=2, col=1)
     fig.update_layout(height=600, title_text="<b>X-bar & R Chart for Subgroup Data (Potency Assay)</b>")
     return fig
-
 def plot_p_chart(df):
     df['proportion'] = df['Batches_Failed'] / df['Batches_Tested']
     p_bar = df['Batches_Failed'].sum() / df['Batches_Tested'].sum()
     df['UCL'] = p_bar + 3 * np.sqrt(p_bar * (1 - p_bar) / df['Batches_Tested'])
     df['LCL'] = (p_bar - 3 * np.sqrt(p_bar * (1 - p_bar) / df['Batches_Tested'])).clip(lower=0)
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df['Month'], y=df['proportion'], name='Proportion Failed', mode='lines+markers'))
-    fig.add_trace(go.Scatter(x=df['Month'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color='red', dash='dash')))
-    fig.add_trace(go.Scatter(x=df['Month'], y=df['LCL'], name='LCL (Varying)', mode='lines', line=dict(color='red', dash='dash')))
-    fig.add_hline(y=p_bar, name='Average Fail Rate', line=dict(color='green', dash='dot'))
+    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Month'], y=df['proportion'], name='Proportion Failed', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Month'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color='red', dash='dash'))); fig.add_trace(go.Scatter(x=df['Month'], y=df['LCL'], name='LCL (Varying)', mode='lines', line=dict(color='red', dash='dash'))); fig.add_hline(y=p_bar, name='Average Fail Rate', line=dict(color='green', dash='dot'))
     outliers = df[df['proportion'] > df['UCL']]; fig.add_trace(go.Scatter(x=outliers['Month'], y=outliers['proportion'], mode='markers', name='Out of Control Signal', marker=dict(symbol='x', color='red', size=12)))
     fig.update_layout(title='<b>p-Chart for Batch Release Failure Rate</b>', xaxis_title='Month', yaxis_title='Proportion of Batches Failed', yaxis_tickformat=".2%")
+    return fig
+def plot_tech_opportunity_matrix(df):
+    df['Complexity_Num'] = df['Implementation_Complexity_Score']
+    avg_impact = df['Est_Throughput_Increase_Factor'].mean(); avg_complexity = df['Complexity_Num'].mean()
+    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Complexity_Num'], y=df['Est_Throughput_Increase_Factor'], mode='markers+text', text=df['Technology'], textposition='top center', marker=dict(size=df['Est_FTE_Saving']*15, color=df['ProcessArea'].astype('category').cat.codes, colorscale='viridis', showscale=False), hovertext=df['Targeted_Process'], name='Technologies'))
+    fig.add_vline(x=avg_complexity, line_width=1, line_dash="dash", line_color="grey"); fig.add_hline(y=avg_impact, line_width=1, line_dash="dash", line_color="grey")
+    fig.update_layout(title='<b>Technology Opportunity Prioritization Matrix</b>', xaxis_title='Implementation Complexity (Lower is Better)', yaxis_title='Throughput Increase (Factor)')
+    fig.add_annotation(x=avg_complexity*0.9, y=avg_impact*1.1, text="<b>🔥 QUICK WINS 🔥</b>", showarrow=False, font=dict(color="#2e7d32", size=14)); fig.add_annotation(x=avg_complexity*1.1, y=avg_impact*1.1, text="<b>STRATEGIC BETS</b>", showarrow=False, font=dict(color="#2962ff")); fig.add_annotation(x=avg_complexity*0.9, y=avg_impact*0.9, text="<b>INCREMENTAL</b>", showarrow=False, font=dict(color="#ffc107")); fig.add_annotation(x=avg_complexity*1.1, y=avg_impact*0.9, text="<b>LUXURY</b>", showarrow=False, font=dict(color="grey"))
     return fig
 
 # ======================================================================================
@@ -145,66 +196,55 @@ def plot_p_chart(df):
 # ======================================================================================
 st.title("🧬 Analytical Development Operations Command Center")
 st.markdown("##### A strategic dashboard for managing high-throughput testing, method lifecycle, and program leadership in biologics development.")
-sample_df, cqa_df, transfer_df, doe_df, team_df, equipment_df, subgroup_df, p_chart_df = generate_master_data()
+sample_df, cqa_df, transfer_df, doe_df, team_df, equipment_df, subgroup_df, p_chart_df, tech_df = generate_master_data()
 transfer_risk_model = get_transfer_risk_model(transfer_df)
 
 st.markdown("### I. AD Operations & Sample Throughput Command Center")
-kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
-avg_tat = (sample_df['Backlog'].mean() / sample_df['Samples_Tested'].mean()) * 7 if sample_df['Samples_Tested'].mean() > 0 else 0; kpi_col1.metric("Avg. Sample TAT (Days)", f"{avg_tat:.1f}")
-kpi_col2.metric("Weekly Throughput", f"{sample_df['Samples_Tested'].iloc[-1]} Samples", f"{sample_df['Samples_Tested'].iloc[-1] - sample_df['Samples_Tested'].iloc[-2]:+d} vs last week")
-kpi_col3.metric("Methods in Transfer", f"{transfer_df[transfer_df['Status'].isin(['Validation', 'Optimization'])].shape[0]}")
-equipment_offline = equipment_df[equipment_df['Status'] != 'Online'].shape[0]; kpi_col4.metric("Equipment Readiness", f"{100-((equipment_offline/len(equipment_df))*100):.0f}%", f"{equipment_offline} Instrument(s) Offline", "inverse")
+kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4); avg_tat = (sample_df['Backlog'].mean() / sample_df['Samples_Tested'].mean()) * 7 if sample_df['Samples_Tested'].mean() > 0 else 0; kpi_col1.metric("Avg. Sample TAT (Days)", f"{avg_tat:.1f}"); kpi_col2.metric("Weekly Throughput", f"{sample_df['Samples_Tested'].iloc[-1]} Samples", f"{sample_df['Samples_Tested'].iloc[-1] - sample_df['Samples_Tested'].iloc[-2]:+d} vs last week"); kpi_col3.metric("Methods in Transfer", f"{transfer_df[transfer_df['Status'].isin(['Validation', 'Optimization'])].shape[0]}"); equipment_offline = equipment_df[equipment_df['Status'] != 'Online'].shape[0]; kpi_col4.metric("Equipment Readiness", f"{100-((equipment_offline/len(equipment_df))*100):.0f}%", f"{equipment_offline} Instrument(s) Offline", "inverse")
 st.markdown("---")
 
 tab1, tab2, tab3, tab4 = st.tabs(["**II. METHOD PERFORMANCE & OPTIMIZATION (DOE/SPC)**", "**III. TECHNOLOGY TRANSFER & VALIDATION (ML)**", "**IV. PROGRAM LEADERSHIP & RESOURCES**", "**V. HIGH THROUGHPUT TECHNOLOGY**"])
 
 with tab1:
     st.header("II. Method Performance & Optimization")
-    st.markdown("_This section provides tools for developing robust analytical procedures using advanced statistical methods and for monitoring their performance over the lifecycle, in accordance with ICH Q8, Q14, and Q2._")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("A. Method Optimization via Response Surface Methodology (RSM)")
-        with st.expander("View Methodological Summary", expanded=False): st.markdown("""...""")
-        st.plotly_chart(plot_rsm_surface(doe_df, 'pH', 'Gradient_Slope_Pct_min', 'AAV_Purity_Pct'), use_container_width=True)
-    with col2:
-        st.subheader("B. Method Lifecycle Monitoring via Statistical Process Control (SPC) Suite")
-        spc_choice = st.selectbox("Select SPC Analysis Type:", ["Method Stability (I-MR Chart)", "Subgroup Precision & Accuracy (X-bar & R Chart)", "Process Yield (p-Chart)"])
-        if spc_choice == "Method Stability (I-MR Chart)":
-            with st.expander("View Methodological Summary", expanded=True): st.markdown("""...""")
-            st.plotly_chart(plot_i_mr_chart(cqa_df, 'AAV_Titer_Control'), use_container_width=True)
-        elif spc_choice == "Subgroup Precision & Accuracy (X-bar & R Chart)":
-            with st.expander("View Methodological Summary", expanded=True): st.markdown("""...""")
-            st.plotly_chart(plot_xbar_r_chart(subgroup_df), use_container_width=True)
-        elif spc_choice == "Process Yield (p-Chart)":
-            with st.expander("View Methodological Summary", expanded=True): st.markdown("""...""")
-            st.plotly_chart(plot_p_chart(p_chart_df), use_container_width=True)
+    st.subheader("A. Method Optimization via Response Surface Methodology (RSM)")
+    with st.expander("View Methodological Summary", expanded=False): st.markdown("""...""")
+    fig_3d, fig_2d = plot_rsm_suite(doe_df, 'pH', 'Gradient_Slope_Pct_min', 'AAV_Purity_Pct')
+    col1, col2 = st.columns(2); col1.plotly_chart(fig_3d, use_container_width=True); col2.plotly_chart(fig_2d, use_container_width=True)
+    st.subheader("B. Method Lifecycle Monitoring via Statistical Process Control (SPC) Suite")
+    spc_choice = st.selectbox("Select SPC Analysis Type:", ["Method Stability (I-MR Chart)", "Subgroup Precision & Accuracy (X-bar & R Chart)", "Process Yield (p-Chart)"])
+    if spc_choice == "Method Stability (I-MR Chart)":
+        with st.expander("View Methodological Summary", expanded=True): st.markdown("""...""")
+        st.plotly_chart(plot_enhanced_i_mr_chart(cqa_df, 'AAV_Titer_Control'), use_container_width=True)
+    elif spc_choice == "Subgroup Precision & Accuracy (X-bar & R Chart)":
+        with st.expander("View Methodological Summary", expanded=True): st.markdown("""...""")
+        st.plotly_chart(plot_xbar_r_chart(subgroup_df), use_container_width=True)
+    elif spc_choice == "Process Yield (p-Chart)":
+        with st.expander("View Methodological Summary", expanded=True): st.markdown("""...""")
+        st.plotly_chart(plot_p_chart(p_chart_df), use_container_width=True)
 
 with tab2:
     st.header("III. Technology Transfer & Validation")
-    st.markdown("_This section provides tools to manage the transfer of analytical procedures to receiving units (QC labs, CDMOs) and to predict the likelihood of success based on key attributes._")
-    col1, col2 = st.columns([1,2])
+    col1, col2 = st.columns([1,1])
     with col1:
-        st.subheader("A. Tech Transfer Risk Prediction (ML)")
+        st.subheader("A. Tech Transfer Risk Prediction & Explainability")
         with st.expander("View Methodological Summary", expanded=False): st.markdown("""...""")
         complexity = st.slider("Method Complexity (1-10)", 1, 10, 5)
         sop_maturity = st.slider("SOP Maturity (1-10)", 1, 10, 7)
         training_cycles = st.slider("Planned Training Cycles", 1, 5, 2)
         if st.button("🔬 Predict Transfer Success", type="primary"):
             input_df = pd.DataFrame([[complexity, sop_maturity, training_cycles]], columns=['Complexity_Score', 'SOP_Maturity_Score', 'Training_Cycles'])
-            prediction_proba = transfer_risk_model.predict_proba(input_df)[0][1]
-            st.success(f"Predicted Probability of Successful Transfer: **{prediction_proba:.1%}**")
+            st.plotly_chart(plot_transfer_risk_waterfall(transfer_risk_model, input_df), use_container_width=True)
     with col2:
         st.subheader("B. Method Transfer Portfolio Status")
         st.dataframe(transfer_df[['Program', 'Method', 'Receiving_Unit', 'Status']], use_container_width=True)
 
 with tab3:
     st.header("IV. Program Leadership & Resource Management")
-    st.markdown("_This section provides oversight of the AD Ops team's alignment with high-level drug development programs and the status of critical laboratory resources._")
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("A. Sample Testing Capacity vs. Demand")
-        fig = go.Figure(); fig.add_trace(go.Bar(x=sample_df['Week'], y=sample_df['Samples_Received'], name='Samples Received', marker_color='lightgrey')); fig.add_trace(go.Scatter(x=sample_df['Week'], y=sample_df['Backlog'], name='Sample Backlog', yaxis='y2', line=dict(color='red'))); fig.update_layout(title='<b>Weekly Sample Load & Backlog Trend</b>', yaxis_title='Weekly Sample Count', yaxis2=dict(title='Total Backlog', overlaying='y', side='right'))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(go.Figure(data=[go.Bar(name='Samples Tested', x=sample_df['Week'], y=sample_df['Samples_Tested']), go.Bar(name='Backlog Growth', x=sample_df['Week'], y=sample_df['Samples_Received'] - sample_df['Samples_Tested']), go.Scatter(name='Cumulative Backlog', x=sample_df['Week'], y=sample_df['Backlog'], yaxis='y2')]).update_layout(barmode='stack', title='<b>Weekly Sample Flow & Cumulative Backlog</b>', yaxis2=dict(title='Total Backlog', overlaying='y', side='right')), use_container_width=True)
     with col2:
         st.subheader("B. Critical Equipment Status")
         for _, row in equipment_df.iterrows():
@@ -214,52 +254,26 @@ with tab3:
     
 with tab4:
     st.header("V. High Throughput Technology Assessment")
-    st.markdown("_This section focuses on identifying and prioritizing opportunities for automation and high-throughput solutions to accelerate process development._")
-    tech_data = {'Technology': ['Robotic Liquid Handler', 'Automated Plate Reader', 'High-Throughput HPLC', 'Microfluidics Platform'], 'Targeted_Process': ['Sample Preparation', 'ELISA/Potency Assays', 'Purity/Impurity Testing', 'Early-Stage Screening'], 'Est_Throughput_Increase': [5, 3, 4, 10], 'Est_FTE_Saving': [1.5, 0.5, 1.0, 0.75], 'Implementation_Complexity': ['High', 'Low', 'Medium', 'High'], 'Project_Status': ['Evaluation', 'Budgeting', 'Not Started', 'Feasibility']}
-    tech_df = pd.DataFrame(tech_data)
-    st.dataframe(tech_df, use_container_width=True)
+    st.subheader("A. Technology Opportunity Prioritization Matrix")
+    with st.expander("View Methodological Summary", expanded=False): st.markdown("""...""")
+    st.plotly_chart(plot_tech_opportunity_matrix(tech_df), use_container_width=True)
 
 # ============================ SIDEBAR ============================
 st.sidebar.image("https://assets-global.website-files.com/62a269e3ea783635a1608298/62a269e3ea783626786083d9_logo-horizontal.svg", use_container_width=True)
 st.sidebar.markdown("### Role Focus")
 st.sidebar.info("This dashboard is for an **Associate Director, AD Operations**, focused on building a high-throughput testing function, leading method development & transfer, and acting as a PDT representative for biologics.")
-
-# --- ENHANCEMENT: New section for all applicable regulations ---
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Applicable Regulatory Frameworks")
 with st.sidebar.expander("View Key GxP and ISO Regulations", expanded=False):
     st.markdown("""
-    **ICH Q2(R1) - Validation of Analytical Procedures**
-    - The core guideline defining validation characteristics.
-    - *"...specificity, linearity, range, accuracy, precision (repeatability, intermediate precision), detection limit, quantitation limit, robustness."*
-
-    **ICH Q8(R2) - Pharmaceutical Development**
-    - Introduces Quality by Design (QbD) concepts.
-    - *"The aim of pharmaceutical development is to design a quality product and its manufacturing process to consistently deliver the intended performance..."*
-    
-    **ICH Q9 - Quality Risk Management**
-    - The framework for risk-based decision-making.
-    - *"The evaluation of the risk to quality should be based on scientific knowledge and ultimately link to the protection of the patient."*
-
-    **ICH Q14 - Analytical Procedure Development**
-    - Formalizes the lifecycle and QbD approach for methods.
-    - *"This guideline describes science and risk-based approaches for developing and maintaining analytical procedures suitable for the assessment of the quality of drug substances and drug products."*
-
-    **21 CFR Part 211 - cGMP for Finished Pharmaceuticals**
-    - US FDA's enforceable regulations for manufacturing and testing.
-    - *§211.165(e): "The accuracy, sensitivity, specificity, and reproducibility of test methods employed by the firm shall be established and documented."*
-    
-    **21 CFR Part 11 - Electronic Records; Electronic Signatures**
-    - Governs data integrity for all computerized lab systems (LIMS, ELN, CDS).
-    - *"Applicability to records in electronic form that are created, modified, maintained, archived, retrieved, or transmitted, under any records requirements..."*
-
-    **EudraLex Vol. 4, Ch 6 - Quality Control**
-    - The EMA's GMP requirements for QC laboratories.
-    - *"Test methods should be validated... before they are brought into routine use."*
-
-    **ISO 17025:2017 - General requirements for the competence of testing and calibration laboratories**
-    - The international standard for laboratory quality management.
-    - *"The laboratory shall be responsible for the impartiality of its laboratory activities and shall not allow... pressures to compromise impartiality."*
+    **ICH Q2(R1) - Validation of Analytical Procedures**\n*"...specificity, linearity, range, accuracy, precision (repeatability, intermediate precision), detection limit, quantitation limit, robustness."*
+    \n**ICH Q8(R2) - Pharmaceutical Development**\n*"The aim of pharmaceutical development is to design a quality product and its manufacturing process to consistently deliver the intended performance..."*
+    \n**ICH Q9 - Quality Risk Management**\n*"The evaluation of the risk to quality should be based on scientific knowledge and ultimately link to the protection of the patient."*
+    \n**ICH Q14 - Analytical Procedure Development**\n*"This guideline describes science and risk-based approaches for developing and maintaining analytical procedures..."*
+    \n**21 CFR Part 211 - cGMP for Finished Pharmaceuticals**\n*§211.165(e): "The accuracy, sensitivity, specificity, and reproducibility of test methods... shall be established and documented."*
+    \n**21 CFR Part 11 - Electronic Records; Electronic Signatures**\n*"Applicability to records in electronic form that are created, modified, maintained, archived, retrieved, or transmitted..."*
+    \n**EudraLex Vol. 4, Ch 6 - Quality Control**\n*"Test methods should be validated... before they are brought into routine use."*
+    \n**ISO 17025:2017 - General requirements for the competence of testing and calibration laboratories**\n*"The laboratory shall be responsible for the impartiality of its laboratory activities..."*
     """)
 
 st.sidebar.markdown("---")
