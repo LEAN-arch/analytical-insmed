@@ -90,28 +90,40 @@ def generate_master_data():
     zone_data = np.random.normal(20, 0.5, 25); zone_data[15:] -= 0.4; zone_df = pd.DataFrame({'Seal_Strength': zone_data, 'Operator': np.random.choice(['Op-A', 'Op-B'], 25)})
     imr_data = np.random.normal(99.5, 0.1, 100); imr_data[80:] -= 0.25; imr_df = pd.DataFrame({'Purity': imr_data, 'Date': pd.to_datetime(pd.date_range(start='2023-01-01', periods=100, freq='D'))})
     cpk_data = np.random.normal(50.5, 0.25, 150); cpk_df = pd.DataFrame({'Titer': cpk_data})
-    mean_vec = [95, 1.0e13]; cov_mat = [[1.5, 0.6e13], [0.6e13, 0.05e26]]; t2_data_in = np.random.multivariate_normal(mean_vec, cov_mat, 30); t2_outlier = [97.5, 0.9e13]; t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]]); t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer_vg_mL'])
-    p_data = {'Month': pd.to_datetime(pd.date_range(start='2023-01-01', periods=12, freq='M')), 'SSTs_Run': np.random.randint(40, 60, 12)}; p_df = pd.DataFrame(p_data); p_df['SSTs_Failed'] = np.random.binomial(n=p_df['SSTs_Run'], p=0.05); p_df.loc[9, 'SSTs_Failed'] = 8
+    
+    # FIX 1: Correctly generate a valid covariance matrix for Hotelling T² data
+    mean_vec = [95, 1.0e13]
+    std_devs = [1.5, 0.1e13]
+    correlation = 0.7
+    cov_mat = [[std_devs[0]**2, correlation * std_devs[0] * std_devs[1]], [correlation * std_devs[0] * std_devs[1], std_devs[1]**2]]
+    t2_data_in = np.random.multivariate_normal(mean_vec, cov_mat, 30); t2_outlier = [97.5, 0.9e13]; t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]]); t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer_vg_mL'])
+    
+    # FIX 2: Use 'ME' for month-end frequency instead of the deprecated 'M'
+    p_data = {'Month': pd.to_datetime(pd.date_range(start='2023-01-01', periods=12, freq='ME')), 'SSTs_Run': np.random.randint(40, 60, 12)}; p_df = pd.DataFrame(p_data); p_df['SSTs_Failed'] = np.random.binomial(n=p_df['SSTs_Run'], p=0.05); p_df.loc[9, 'SSTs_Failed'] = 8
+    
     np_df = pd.DataFrame({'Week': range(1, 21), 'Batches_Sampled': 50, 'Defective_Vials': np.random.binomial(n=50, p=0.04, size=20)}); np_df.loc[12, 'Defective_Vials'] = 7
     c_df = pd.DataFrame({'Week': range(1, 21), 'Contaminants_per_Plate': np.random.poisson(lam=3, size=20)}); c_df.loc[15, 'Contaminants_per_Plate'] = 9
     u_data = {'Batch': range(1, 16), 'Vials_Inspected': np.random.randint(50, 150, 15)}; u_df = pd.DataFrame(u_data); u_df['Particulate_Defects'] = np.random.poisson(lam=u_df['Vials_Inspected'] * 0.02); u_df.loc[10, 'Particulate_Defects'] = 8
     
     # --- Data for LIFECYCLE HUB ---
-    stability_data = {'Time_months': [0, 3, 6, 9, 12, 18, 24], 'Potency_pct': [101.2, 100.8, 99.5, 98.9, 98.1, 97.0, 95.8]}; stability_df = pd.DataFrame(stability_data)
-    tost_data = {'HPLC': np.random.normal(98.5, 0.5, 30), 'UPLC': np.random.normal(98.7, 0.4, 30)}; tost_df = pd.DataFrame(tost_data)
+    stability_df = pd.DataFrame({'Time_months': [0, 3, 6, 9, 12, 18, 24], 'Potency_pct': [101.2, 100.8, 99.5, 98.9, 98.1, 97.0, 95.8]})
+    tost_df = pd.DataFrame({'HPLC': np.random.normal(98.5, 0.5, 30), 'UPLC': np.random.normal(98.7, 0.4, 30)})
     screening_df = pd.DataFrame({'Factor': ['Temp', 'pH', 'Flow_Rate', 'Gradient', 'Column_Lot', 'Analyst'], 'Effect_Size': [0.2, 1.8, 0.1, 1.5, 0.3, 0.2]})
     doe_df = pd.DataFrame(np.random.uniform(-1, 1, (15, 2)), columns=['pH', 'Gradient_Slope']); doe_df['Peak_Resolution'] = 2.5 - 0.5*doe_df['pH']**2 - 0.8*doe_df['Gradient_Slope']**2 + 0.3*doe_df['pH']*doe_df['Gradient_Slope'] + np.random.normal(0, 0.1, 15)
     
     # --- Data for PREDICTIVE HUB ---
     oos_df = pd.DataFrame({'Instrument': np.random.choice(['HPLC-01', 'HPLC-02', 'CE-01'], 100), 'Analyst': np.random.choice(['Smith', 'Lee', 'Chen'], 100), 'Molecule_Type': np.random.choice(['mAb', 'AAV'], 100), 'Root_Cause': np.random.choice(['Sample_Prep_Error', 'Instrument_Malfunction', 'Column_Issue'], 100, p=[0.5, 0.3, 0.2])})
-    backlog_df = pd.DataFrame({'Week': pd.date_range('2022-01-01', periods=104, freq='W'), 'Backlog': (10 + np.arange(104)*0.5 + np.random.normal(0, 5, 104) + np.sin(np.arange(104)/8)*5).clip(lower=0)})
+    
+    # FIX 3: Use min=0 instead of lower=0 for the NumPy array .clip() method
+    backlog_vals = 10 + np.arange(104)*0.5 + np.random.normal(0, 5, 104) + np.sin(np.arange(104)/8)*5
+    backlog_df = pd.DataFrame({'Week': pd.date_range('2022-01-01', periods=104, freq='W'), 'Backlog': backlog_vals.clip(min=0)})
+    
     maintenance_df = pd.DataFrame({'Run_Hours': np.random.randint(50, 1000, 100), 'Pressure_Spikes': np.random.randint(0, 20, 100), 'Column_Age_Days': np.random.randint(10, 300, 100)}); maintenance_df['Needs_Maint'] = (maintenance_df['Run_Hours'] > 600) | (maintenance_df['Pressure_Spikes'] > 15) | (maintenance_df['Column_Age_Days'] > 250)
 
     # --- Data for QBD & QUALITY SYSTEMS HUB ---
     sankey_df = pd.DataFrame({'Source': ['Column Lot', 'Mobile Phase Purity', 'Gradient Slope', 'Flow Rate', 'Column Temp', 'Peak Resolution', 'Assay Accuracy'], 'Target': ['Peak Resolution', 'Peak Resolution', 'Peak Resolution', 'Assay Precision', 'Assay Accuracy', 'Final Purity Result', 'Final Purity Result'], 'Value': [8, 5, 10, 7, 6, 12, 10]})
 
     return budget_df, team_df, lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df, stability_df, tost_df, screening_df, doe_df, oos_df, backlog_df, maintenance_df, sankey_df
-
 # ======================================================================================
 # SECTION 4: PLOTTING & ANALYSIS FUNCTIONS
 # ======================================================================================
