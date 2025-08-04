@@ -1,30 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-#
-# A single-file Streamlit application for the Associate Director, AD Operations.
-#
-# VERSION: Final, Unabridged & Fully Labeled Visualizations
-#
-# This dashboard provides a real-time, strategic, and scientifically-grounded
-# view of the Analytical Development Operations function. It is designed to manage a
-# high-throughput testing team, optimize analytical methods using advanced statistics,
-# oversee the technology transfer lifecycle, and support the broader process
-# development pipeline for biologic drug candidates (e.g., AAVs).
-#
-# It integrates principles from:
-#   - ICH Q2(R1) Validation of Analytical Procedures
-#   - ICH Q8(R2) Pharmaceutical Development
-#   - ICH Q14 Analytical Procedure Development
-#   - cGMP, FDA, & EMA guidelines
-#   - ALCOA+ Data Integrity Principles
-#
-# To Run:
-# 1. Save this code as 'ad_ops_final_labeled_dashboard.py'
-# 2. Create 'requirements.txt' with specified libraries.
-# 3. Install dependencies: pip install -r requirements.txt
-# 4. Run from your terminal: streamlit run ad_ops_final_labeled_dashboard.py
-#
-# ======================================================================================
+
 
 import streamlit as st
 import pandas as pd
