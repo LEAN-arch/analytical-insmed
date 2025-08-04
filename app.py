@@ -91,14 +91,13 @@ def generate_master_data():
     imr_data = np.random.normal(99.5, 0.1, 100); imr_data[80:] -= 0.25; imr_df = pd.DataFrame({'Purity': imr_data, 'Date': pd.to_datetime(pd.date_range(start='2023-01-01', periods=100, freq='D'))})
     cpk_data = np.random.normal(50.5, 0.25, 150); cpk_df = pd.DataFrame({'Titer': cpk_data})
     
-    # FIX 1: Correctly generate a valid covariance matrix for Hotelling T² data
     mean_vec = [95, 1.0e13]
     std_devs = [1.5, 0.1e13]
     correlation = 0.7
     cov_mat = [[std_devs[0]**2, correlation * std_devs[0] * std_devs[1]], [correlation * std_devs[0] * std_devs[1], std_devs[1]**2]]
     t2_data_in = np.random.multivariate_normal(mean_vec, cov_mat, 30); t2_outlier = [97.5, 0.9e13]; t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]]); t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer_vg_mL'])
     
-    # FIX 2: Use 'ME' for month-end frequency instead of the deprecated 'M'
+    # DEBUG FIX: Use 'ME' for month-end frequency instead of the deprecated 'M'.
     p_data = {'Month': pd.to_datetime(pd.date_range(start='2023-01-01', periods=12, freq='ME')), 'SSTs_Run': np.random.randint(40, 60, 12)}; p_df = pd.DataFrame(p_data); p_df['SSTs_Failed'] = np.random.binomial(n=p_df['SSTs_Run'], p=0.05); p_df.loc[9, 'SSTs_Failed'] = 8
     
     np_df = pd.DataFrame({'Week': range(1, 21), 'Batches_Sampled': 50, 'Defective_Vials': np.random.binomial(n=50, p=0.04, size=20)}); np_df.loc[12, 'Defective_Vials'] = 7
@@ -114,7 +113,7 @@ def generate_master_data():
     # --- Data for PREDICTIVE HUB ---
     oos_df = pd.DataFrame({'Instrument': np.random.choice(['HPLC-01', 'HPLC-02', 'CE-01'], 100), 'Analyst': np.random.choice(['Smith', 'Lee', 'Chen'], 100), 'Molecule_Type': np.random.choice(['mAb', 'AAV'], 100), 'Root_Cause': np.random.choice(['Sample_Prep_Error', 'Instrument_Malfunction', 'Column_Issue'], 100, p=[0.5, 0.3, 0.2])})
     
-    # FIX 3: Use min=0 instead of lower=0 for the NumPy array .clip() method
+    # DEBUG FIX: Use min=0 instead of the deprecated lower=0 for the NumPy array .clip() method.
     backlog_vals = 10 + np.arange(104)*0.5 + np.random.normal(0, 5, 104) + np.sin(np.arange(104)/8)*5
     backlog_df = pd.DataFrame({'Week': pd.date_range('2022-01-01', periods=104, freq='W'), 'Backlog': backlog_vals.clip(min=0)})
     
@@ -168,7 +167,9 @@ def plot_cusum_chart(df):
     render_full_chart_briefing(context="Monitoring a critical process parameter like fill volume on a high-speed aseptic filling line.", significance="Allows for the fastest possible detection of the *onset* of a small, sustained process shift. This is critical for minimizing the amount of non-conforming product generated in high-volume, high-cost manufacturing processes.", regulatory="This is an advanced SPC tool that demonstrates a mature quality system focused on rapid response, aligning with the risk-based principles of **ICH Q9**. It provides a higher level of process control than basic Shewhart charts.")
     target = 10.0; sd = 0.05; k = 0.5 * sd; h = 5 * sd; df['SH-'] = 0.0
     for i in range(1, len(df)): df.loc[i, 'SH-'] = max(0, df.loc[i-1, 'SH-'] + target - df.loc[i, 'Fill_Volume'] - k)
-    fig = go.Figure(); fig.add_trace(go.Scatter(y=df['SH-'], name='CUSUM Low (SH-)', mode='lines+markers', line=dict(color=PRIMARY_COLOR, width=3), customdata=df, hovertemplate='<b>Sample %{x}</b><br>Nozzle: %{customdata[1]}<br>CUSUM Value: %{y:.3f}<extra></extra>')); fig.data[0].customdata=df['Nozzle']; fig.add_hline(y=h, line_dash='dash', line_color=ERROR_RED, annotation_text="Decision Limit (H)")
+    # DEBUG FIX: Removed the line `fig.data[0].customdata=df['Nozzle']` which incorrectly overwrote the customdata and would break the hovertemplate.
+    # The `customdata` is now correctly set to the full dataframe `df` within the `go.Scatter` call.
+    fig = go.Figure(); fig.add_trace(go.Scatter(y=df['SH-'], name='CUSUM Low (SH-)', mode='lines+markers', line=dict(color=PRIMARY_COLOR, width=3), customdata=df, hovertemplate='<b>Sample %{x}</b><br>Nozzle: %{customdata[1]}<br>CUSUM Value: %{y:.3f}<extra></extra>')); fig.add_hline(y=h, line_dash='dash', line_color=ERROR_RED, annotation_text="Decision Limit (H)")
     violation_idx = df[df['SH-'] > h].first_valid_index(); fig.add_annotation(x=violation_idx, y=df['SH-'][violation_idx], text="<b>CUSUM Signal!</b>", showarrow=True, arrowhead=2, ax=20, ay=-60, bgcolor=PRIMARY_COLOR, font=dict(color='white'))
     fig.update_layout(title="<b>CUSUM Chart: Rapid Detection of Fill Volume Shift</b>", yaxis_title="Cumulative Sum from Target", xaxis_title="Sample Number")
     st.plotly_chart(fig, use_container_width=True)
@@ -234,7 +235,9 @@ def plot_hotelling_t2_chart(df):
 
 def plot_p_chart(df):
     render_full_chart_briefing(context="Monitoring the proportion of monthly HPLC System Suitability Tests (SSTs) that fail.", significance="Tracks the failure rate of a key quality system when the number of tests performed each month varies. It provides a high-level view of the health and reliability of an entire analytical system.", regulatory="Directly supports quality system monitoring as required by **21 CFR 211** and **EudraLex Vol. 4**. Tracking SST failures is a critical component of laboratory control and data integrity (**ALCOA+**).")
-    df['proportion'] = df['SSTs_Failed'] / df['SSTs_Run']; p_bar = df['SSTs_Failed'].sum() / df['SSTs_Run'].sum(); df['UCL'] = p_bar + 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run']); df['LCL'] = (p_bar - 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run'])).clip(lower=0)
+    df['proportion'] = df['SSTs_Failed'] / df['SSTs_Run']; p_bar = df['SSTs_Failed'].sum() / df['SSTs_Run'].sum(); df['UCL'] = p_bar + 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run']); 
+    # DEBUG FIX: Use min=0 instead of the deprecated lower=0.
+    df['LCL'] = (p_bar - 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run'])).clip(min=0)
     fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Month'], y=df['proportion'], name='Proportion Failed', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Month'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'))); fig.add_hline(y=p_bar, name='Average Fail Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
     fig.update_layout(title='<b>p-Chart for System Suitability Test (SST) Failure Rate</b>', yaxis_title='Proportion of SSTs Failed', yaxis_tickformat=".1%")
     st.plotly_chart(fig, use_container_width=True)
@@ -260,7 +263,9 @@ def plot_c_chart(df):
 
 def plot_u_chart(df):
     render_full_chart_briefing(context="Monitoring the rate of particulate defects found during the visual inspection of finished drug product vials, where the number of vials inspected from each batch varies.", significance="Provides a normalized measure of quality (defects per unit) that is comparable across batches of different sizes. This is crucial for accurately assessing process stability when production volumes fluctuate.", regulatory="A more sophisticated tool for lot release and stability testing (**21 CFR 211.165, 211.166**). Using a u-chart over a simpler c-chart demonstrates a higher level of statistical understanding when dealing with variable sample sizes.")
-    df['defects_per_unit'] = df['Particulate_Defects'] / df['Vials_Inspected']; u_bar = df['Particulate_Defects'].sum() / df['Vials_Inspected'].sum(); df['UCL'] = u_bar + 3 * np.sqrt(u_bar / df['Vials_Inspected']); df['LCL'] = (u_bar - 3 * np.sqrt(u_bar / df['Vials_Inspected'])).clip(lower=0)
+    df['defects_per_unit'] = df['Particulate_Defects'] / df['Vials_Inspected']; u_bar = df['Particulate_Defects'].sum() / df['Vials_Inspected'].sum(); df['UCL'] = u_bar + 3 * np.sqrt(u_bar / df['Vials_Inspected']); 
+    # DEBUG FIX: Use min=0 instead of the deprecated lower=0.
+    df['LCL'] = (u_bar - 3 * np.sqrt(u_bar / df['Vials_Inspected'])).clip(min=0)
     fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Batch'], y=df['defects_per_unit'], name='Defect Rate', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Batch'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'))); fig.add_hline(y=u_bar, name='Average Defect Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
     fig.add_annotation(x=11, y=df['defects_per_unit'].iloc[10], text="<b>Spike Detected</b>", bgcolor=ERROR_RED, font_color='white')
     fig.update_layout(title='<b>u-Chart for Particulate Defect Rate per Vial</b>', yaxis_title='Defects per Vial', xaxis_title='Batch Number')
@@ -297,7 +302,7 @@ def render_doe_suite(screening_df, doe_df):
         poly = PolynomialFeatures(degree=2); X_poly = poly.fit_transform(doe_df[feature_names]); model = LinearRegression().fit(X_poly, doe_df['Peak_Resolution'])
         x = np.linspace(-1, 1, 30); y = np.linspace(-1, 1, 30); x_grid, y_grid = np.meshgrid(x, y)
         
-        # Create a DataFrame with correct feature names to prevent the warning
+        # Create a DataFrame with correct feature names to prevent potential warnings/errors
         grid_df = pd.DataFrame(np.c_[x_grid.ravel(), y_grid.ravel()], columns=feature_names)
         X_pred_poly = poly.transform(grid_df)
         
@@ -364,7 +369,9 @@ def run_hplc_maintenance_model(df):
         st.subheader("Explainable AI (XAI): Why this score?")
         st.info("This SHAP plot shows which factors are pushing the risk score higher (red) or lower (blue). The size of the bar indicates the magnitude of the factor's impact.")
         explainer = shap.TreeExplainer(model); shap_values = explainer.shap_values(input_df)[1]
-        st_shap(shap.force_plot(explainer.expected_value[1], shap_values, input_df, matplotlib=True), height=150)
+        # DEBUG FIX: Removed `matplotlib=True` argument, which returns the wrong object type for the `st_shap` helper function.
+        # The default JS-based plot is now correctly generated and rendered.
+        st_shap(shap.force_plot(explainer.expected_value[1], shap_values, input_df), height=150)
 
     st.warning("**Actionable Insight:** The model predicts a very high probability that HPLC-01 requires preventative maintenance. The SHAP analysis reveals that the high number of **Run Hours** and **Pressure Spikes** are the primary drivers of this risk score. **Decision:** Schedule HPLC-01 for maintenance this week, prioritizing it over other instruments with lower risk scores to prevent an unexpected failure during a critical run.")
 
@@ -414,6 +421,69 @@ def run_interactive_rca_fishbone():
                     st.markdown(f"- {cause}")
 
     st.success("**Actionable Insight:** The investigation team uses this structured tool to brainstorm. After testing several hypotheses, the team confirmed through re-analysis with a freshly prepared standard that the **'Reference standard degraded'** (under 'Material') was the true root cause. **Decision:** A CAPA will be initiated to revise the reference standard management SOP to include more frequent stability checks.")
+
+# DEBUG FIX: Added the missing function definition for `render_troubleshooting_flowchart`.
+def render_troubleshooting_flowchart():
+    st.info("This flowchart provides a systematic, compliant path for investigating an Out-of-Specification (OOS) result.")
+    graph_definition = """
+    digraph OOS_Flowchart {
+        rankdir=TB;
+        node [shape=box, style="rounded,filled", fillcolor="#E3F2FD", color="#673ab7", fontname="sans-serif"];
+        edge [color="#455A64", fontname="sans-serif"];
+
+        subgraph cluster_phase1 {
+            label = "Phase 1: Initial Investigation";
+            style="rounded,filled";
+            color="#F0F2F6";
+            
+            oos [label="OOS Result Confirmed"];
+            check [label="Lab Investigation: Obvious Error Check\\n(e.g., calculation, dilution)"];
+            error_found [shape=diamond, label="Obvious Error Found?"];
+            invalidate [label="Invalidate Result (with justification)\\nRe-test per SOP"];
+            no_error [label="No Obvious Error Found"];
+
+            oos -> check -> error_found;
+            error_found -> invalidate [label="Yes"];
+            error_found -> no_error [label="No"];
+        }
+        
+        subgraph cluster_phase2 {
+            label = "Phase 2: Full-Scale Investigation";
+            style="rounded,filled";
+            color="#F0F2F6";
+
+            full_rca [label="Conduct Full RCA\\n(Fishbone, 5 Whys)"];
+            mfg [label="Review Manufacturing & Process Data"];
+            retest [label="Hypothesis-Driven Retesting\\n(e.g., new column, fresh reagents)"];
+            root_cause [shape=diamond, label="Root Cause Identified?"];
+            
+            no_error -> full_rca;
+            full_rca -> mfg;
+            full_rca -> retest;
+        }
+        
+        subgraph cluster_phase3 {
+            label = "Phase 3: Conclusion & CAPA";
+            style="rounded,filled";
+            color="#F0F2F6";
+            
+            capa [label="Implement CAPA\\n(Corrective & Preventive Action)"];
+            batch_decision [label="Make Batch Disposition Decision\\n(Release, Reject, Rework)"];
+            conclude [label="Close Investigation"];
+            
+            root_cause -> capa [label="Yes"];
+            root_cause -> batch_decision [label="No (Inconclusive)"];
+            capa -> batch_decision;
+            batch_decision -> conclude;
+        }
+
+        retest -> root_cause;
+        mfg -> root_cause;
+    }
+    """
+    st.graphviz_chart(graph_definition)
+    st.success("**Actionable Insight:** An OOS investigation must be a formal, documented process. This flowchart ensures all required steps are taken, from the initial check for simple errors to a full-scale RCA and CAPA implementation. **Decision:** All lab personnel will be retrained on this OOS procedure to ensure consistent and compliant execution.")
+
 # ======================================================================================
 # SECTION 5: PAGE RENDERING FUNCTIONS
 # ======================================================================================
