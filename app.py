@@ -130,20 +130,31 @@ def generate_master_data():
 ## --- STATISTICAL TOOLKIT FUNCTIONS (ENRICHED) ---
 def plot_levey_jennings(df):
     render_full_chart_briefing(context="Daily QC analysis of a certified reference material on an HPLC system to ensure system performance.", significance="Detects shifts or increased variability in an analytical instrument's performance, ensuring the validity of daily sample results. It distinguishes between random error (a single outlier) and systematic error (a developing bias).", regulatory="Directly supports **21 CFR 211.160** (General requirements for laboratory controls) and **ISO 17025** by providing documented evidence of the ongoing validity of test methods. Westgard rules are an industry best practice for clinical and QC labs.")
-    mean, sd = 100.0, 2.0; fig = go.Figure()
+    mean, sd = 100.0, 2.0
+    
+    fig = go.Figure()
+    # Add shaded zones first (layers)
     fig.add_hrect(y0=mean - 3*sd, y1=mean + 3*sd, line_width=0, fillcolor='rgba(255, 193, 7, 0.1)', layer="below", name='±3s Zone')
     fig.add_hrect(y0=mean - 2*sd, y1=mean + 2*sd, line_width=0, fillcolor='rgba(76, 175, 80, 0.2)', layer="below", name='±2s Zone')
     fig.add_hrect(y0=mean - sd, y1=mean + sd, line_width=0, fillcolor='rgba(76, 175, 80, 0.3)', layer="below", name='±1s Zone')
-    fig.add_trace(go.Scatter(y=df['Value'], mode='lines+markers', line=dict(color=PRIMARY_COLOR), customdata=df, hovertemplate='<b>Value: %{y:.2f}</b><br>Analyst: %{customdata[1]}<br>Deviation: %{customdata[2]:.2f} SD<extra></extra>'))
+    
+    # Add the scatter trace with customdata
     df['Deviation_SD'] = (df['Value'] - mean) / sd
-    fig.data[3].customdata = df[['Analyst', 'Deviation_SD']] # Use index 3 assuming 3 hrects
+    fig.add_trace(go.Scatter(
+        y=df['Value'], 
+        mode='lines+markers', 
+        line=dict(color=PRIMARY_COLOR),
+        customdata=df[['Analyst', 'Deviation_SD']],
+        hovertemplate='<b>Value: %{y:.2f}</b><br>Analyst: %{customdata[0]}<br>Deviation: %{customdata[1]:.2f} SD<extra></extra>'
+    ))
+    
     fig.add_hline(y=mean, line_dash='solid', line_color=SUCCESS_GREEN, annotation_text="Mean")
     fig.add_annotation(x=20, y=106.5, text="<b>1-3s Violation</b><br>Random Error", showarrow=True, arrowhead=2, ax=0, ay=-50, bgcolor=ERROR_RED, font=dict(color='white'))
     fig.add_annotation(x=26, y=104.8, text="<b>2-2s Violation</b><br>Systematic Bias", showarrow=True, arrowhead=2, ax=0, ay=50, bgcolor=WARNING_AMBER)
+    
     fig.update_layout(title="<b>Levey-Jennings Chart with Westgard Rule Violations</b>", yaxis_title="Reference Material Recovery (%)", xaxis_title="Run Number")
     st.plotly_chart(fig, use_container_width=True)
     st.error("**Actionable Insight:** The 1-3s violation indicates a random error, requiring a re-run. The subsequent 2-2s violation indicates a systematic bias. **Decision:** Halt testing on the instrument and issue a work order to investigate the mobile phase preparation process and recalibrate the detector.")
-
 def plot_ewma_chart(df):
     render_full_chart_briefing(context="Monitoring a critical quality attribute (CQA), like the concentration of a key impurity, over dozens of purification runs.", significance="Provides a highly sensitive early warning for small but persistent process drifts that could lead to out-of-specification (OOS) results if left unchecked, enabling proactive rather than reactive maintenance.", regulatory="Supports the principles of Continued Process Verification (CPV) outlined in the **FDA's Process Validation Guidance** and **ICH Q8**. It is a tool to ensure the process remains in a state of control throughout its lifecycle.")
     lam = 0.2; mean = df['Impurity'].iloc[:20].mean(); sd = df['Impurity'].iloc[:20].std(); df['EWMA'] = df['Impurity'].ewm(span=(2/lam)-1, adjust=False).mean(); n = df.index + 1; ucl = mean + 3 * sd * np.sqrt((lam / (2 - lam)) * (1 - (1 - lam)**(2 * n))); lcl = mean - 3 * sd * np.sqrt((lam / (2 - lam)) * (1 - (1 - lam)**(2 * n)))
@@ -272,22 +283,29 @@ def plot_stability_analysis(df):
 
 def render_doe_suite(screening_df, doe_df):
     render_full_chart_briefing(context="Developing a new HPLC purity method from first principles, following Quality by Design (QbD).", significance="A strategic, two-phase approach to method development. The Screening phase efficiently identifies the few critical parameters ('vital few') from the many potential ones ('trivial many'). The Optimization phase then precisely models the behavior of those critical parameters to define a robust operating space.", regulatory="This structured approach is the core principle of **ICH Q8(R2)** and **ICH Q14**. It moves beyond trial-and-error, creating a deep process understanding that is highly valued by regulatory agencies.")
+    
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Phase 1: Screening Design")
-        fig_pareto = px.bar(screening_df.sort_values('Effect_Size', ascending=False), x='Factor', y='Effect_Size', title="<b>Screening: Identifying Critical Parameters</b>", labels={'Effect_Size': 'Standardized Effect on Resolution'}); fig_pareto.add_hline(y=1.0, line_dash='dash', line_color=ERROR_RED, annotation_text="Significance Threshold")
+        fig_pareto = px.bar(screening_df.sort_values('Effect_Size', ascending=False), x='Factor', y='Effect_Size', title="<b>Screening: Identifying Critical Parameters</b>", labels={'Effect_Size': 'Standardized Effect on Resolution'})
+        fig_pareto.add_hline(y=1.0, line_dash='dash', line_color=ERROR_RED, annotation_text="Significance Threshold")
         st.plotly_chart(fig_pareto, use_container_width=True)
         st.info("The Pareto plot shows that **pH** and **Gradient Slope** have statistically significant effects on peak resolution. The other factors can be fixed at standard levels.")
     with col2:
         st.subheader("Phase 2: Optimization (RSM)")
-        poly = PolynomialFeatures(degree=2); X_poly = poly.fit_transform(doe_df[['pH', 'Gradient_Slope']]); model = LinearRegression().fit(X_poly, doe_df['Peak_Resolution'])
+        feature_names = ['pH', 'Gradient_Slope']
+        poly = PolynomialFeatures(degree=2); X_poly = poly.fit_transform(doe_df[feature_names]); model = LinearRegression().fit(X_poly, doe_df['Peak_Resolution'])
         x = np.linspace(-1, 1, 30); y = np.linspace(-1, 1, 30); x_grid, y_grid = np.meshgrid(x, y)
-        X_pred_poly = poly.transform(np.c_[x_grid.ravel(), y_grid.ravel()]); z_grid = model.predict(X_pred_poly).reshape(x_grid.shape)
+        
+        # Create a DataFrame with correct feature names to prevent the warning
+        grid_df = pd.DataFrame(np.c_[x_grid.ravel(), y_grid.ravel()], columns=feature_names)
+        X_pred_poly = poly.transform(grid_df)
+        
+        z_grid = model.predict(X_pred_poly).reshape(x_grid.shape)
         fig_rsm = go.Figure(data=[go.Contour(z=z_grid, x=x, y=y, colorscale='viridis', contours=dict(coloring='heatmap', showlabels=True))]); fig_rsm.add_shape(type="rect", x0=-0.5, y0=-0.7, x1=0.5, y1=0.7, line=dict(color="white", width=3, dash="dot"), fillcolor="rgba(255,255,255,0.3)"); fig_rsm.add_annotation(x=0, y=0, text="<b>MODR</b>", font=dict(color='white', size=16), showarrow=False); fig_rsm.update_layout(title="<b>Optimization: Defining the MODR</b>", xaxis_title="pH (Normalized)", yaxis_title="Gradient Slope (Normalized)")
         st.plotly_chart(fig_rsm, use_container_width=True)
         st.info("The contour plot defines the Method Operable Design Region (MODR). The method setpoint will be chosen at the center of this space for maximum robustness.")
     st.success("**Actionable Insight:** The two-phase DOE approach provides a highly efficient and scientifically sound path to a robust method. **Decision:** Finalize the method SOP with the setpoints derived from the RSM optimization and proceed to formal validation.")
-
 def plot_method_equivalency_tost(df):
     render_full_chart_briefing(context="Comparing a newly developed, faster UPLC method against the legacy validated HPLC method to ensure results are comparable before replacing the old method.", significance="Proves that two methods are statistically equivalent and can be used interchangeably. This is critical for post-approval changes, method updates, or transfers between sites without needing to re-establish all specifications.", regulatory="The TOST (Two One-Sided T-Tests) approach is the gold standard for demonstrating equivalency and is preferred by the **FDA** over simple t-tests. It directly supports lifecycle management as described in **ICH Q12**.")
     diff = df['UPLC'] - df['HPLC']; n = len(diff); mean_diff = diff.mean(); std_diff = diff.std(ddof=1); se_diff = std_diff / np.sqrt(n); t_crit = stats.t.ppf(0.95, df=n-1); ci_lower = mean_diff - t_crit * se_diff; ci_upper = mean_diff + t_crit * se_diff; equiv_limit = 0.5
@@ -317,11 +335,16 @@ def run_oos_prediction_model(df):
 
 def plot_backlog_forecast(df):
     render_full_chart_briefing(context="The AD Ops leader needs to plan resource allocation (headcount, instrument time) for the upcoming quarters.", significance="Moves planning from reactive to proactive. By forecasting the future sample backlog, a leader can provide data-driven justification for hiring new staff or purchasing new equipment *before* the lab becomes a bottleneck to the entire R&D organization.", regulatory="While not a direct compliance requirement, this demonstrates strong resource and capacity planning, a key competency for laboratory management under quality systems like **ISO 17025** and general GxP.")
-    model = SimpleExpSmoothing(df['Backlog'], initialization_method="estimated").fit(); forecast_df = pd.DataFrame(model.forecast(26), columns=['Forecast']); ci = model.get_prediction(start=len(df), end=len(df)+25).summary_frame(alpha=0.1)
-    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Week'], y=df['Backlog'], name='Historical Backlog', line=dict(color=PRIMARY_COLOR))); fig.add_trace(go.Scatter(x=forecast_df.index, y=forecast_df['Forecast'], name='Forecasted Backlog', line=dict(color=ERROR_RED, dash='dash'))); fig.add_trace(go.Scatter(x=ci.index, y=ci['mean_ci_upper'], name='90% CI', line=dict(color='rgba(211,47,47,0.5)', dash='dot'), showlegend=False)); fig.add_trace(go.Scatter(x=ci.index, y=ci['mean_ci_lower'], name='90% CI', line=dict(color='rgba(211,47,47,0.5)', dash='dot'), fill='tonexty', fillcolor='rgba(211,47,47,0.1)'))
+    
+    model = SimpleExpSmoothing(df['Backlog'], initialization_method="estimated").fit()
+    forecast = model.forecast(26) # Forecast 6 months (26 weeks)
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df['Week'], y=df['Backlog'], name='Historical Backlog', line=dict(color=PRIMARY_COLOR)))
+    fig.add_trace(go.Scatter(x=forecast.index, y=forecast, name='Forecasted Backlog', line=dict(color=ERROR_RED, dash='dash')))
+    
     st.plotly_chart(fig, use_container_width=True)
-    st.error(f"**Actionable Insight:** The time series forecast, including the 90% confidence interval ('cone of uncertainty'), predicts that the sample backlog will exceed **{forecast_df['Forecast'].iloc[-1]:.0f} samples** within the next 6 months. **Decision:** Submit a formal headcount request for one additional Research Associate, using this forecast as the primary data-driven justification.")
-
+    st.error(f"**Actionable Insight:** The time series forecast predicts that the sample backlog will exceed **{forecast.iloc[-1]:.0f} samples** within the next 6 months. This trend is unsustainable with the current staffing level. **Decision:** Submit a formal headcount request for one additional Research Associate, using this forecast as the primary data-driven justification.")
 @st.cache_resource
 def get_maint_model(_df):
     features = ['Run_Hours', 'Pressure_Spikes', 'Column_Age_Days']; target = 'Needs_Maint'; X, y = _df[features], _df[target]
@@ -365,16 +388,32 @@ def render_method_v_model():
 
 def run_interactive_rca_fishbone():
     render_full_chart_briefing(context="An Out-of-Specification (OOS) result for purity has been confirmed, and a formal laboratory investigation has been launched.", significance="A structured RCA tool like a Fishbone diagram prevents 'tunnel vision' during an investigation. It forces the team to consider a wide range of potential causes across different categories, leading to a more thorough and accurate root cause determination.", regulatory="Using a formal RCA tool is a best practice for OOS investigations, as required by **21 CFR 211.192**. It provides documented, objective evidence that the investigation was systematic and not just a cursory check.")
-    st.subheader("Interactive Fishbone Diagram for OOS Investigation")
-    causes = {'Man (Analyst)': ['Inadequate training', 'Improper sample preparation', 'Calculation error'], 'Machine (Instrument)': ['Leaky pump seal', 'Detector lamp aging', 'Incorrect injection volume'], 'Material (Reagents/Sample)': ['Reference standard degraded', 'Contaminated mobile phase', 'Sample degradation'], 'Method': ['SOP is unclear or incorrect', 'Method not robust to lab conditions', 'Incorrect column equilibration time'], 'Measurement': ['Integration parameters incorrect', 'Calibration curve expired', 'Wrong standard concentration used'], 'Environment': ['Lab temperature out of range', 'Vibration near balance', 'Power fluctuation']}
-    category = st.selectbox("Select a category to investigate:", list(causes.keys())); st.write(f"**Potential Causes related to {category}:**"); [st.write(f"- {cause}") for cause in causes[category]]
-    st.success("**Actionable Insight:** The investigation team uses this structured tool to brainstorm. After testing several hypotheses, the team confirmed through re-analysis with a freshly prepared standard that the **'Reference standard degraded'** was the true root cause. **Decision:** A CAPA will be initiated to revise the reference standard management SOP to include more frequent stability checks.")
+    
+    st.subheader("Fishbone Diagram for OOS Investigation")
+    st.info("This tool structures the brainstorming process for a root cause analysis investigation.")
+    
+    causes = {
+        'Man (Analyst)': ['Inadequate training', 'Improper sample preparation', 'Calculation error'],
+        'Machine (Instrument)': ['Leaky pump seal', 'Detector lamp aging', 'Incorrect injection volume'],
+        'Material (Reagents/Sample)': ['Reference standard degraded', 'Contaminated mobile phase', 'Sample degradation'],
+        'Method': ['SOP is unclear or incorrect', 'Method not robust to lab conditions', 'Incorrect column equilibration time'],
+        'Measurement': ['Integration parameters incorrect', 'Calibration curve expired', 'Wrong standard concentration used'],
+        'Environment': ['Lab temperature out of range', 'Vibration near balance', 'Power fluctuation']
+    }
+    
+    # Use columns for a robust, non-interactive but clear layout
+    cols = st.columns(3)
+    
+    # Distribute the categories into columns
+    categories = list(causes.keys())
+    for i, cat in enumerate(categories):
+        with cols[i % 3]:
+            with st.container(border=True):
+                st.markdown(f"**{cat}**")
+                for cause in causes[cat]:
+                    st.markdown(f"- {cause}")
 
-def render_troubleshooting_flowchart():
-    render_full_chart_briefing(context="An unexpected system suitability failure occurs during a routine QC test.", significance="A formal troubleshooting flowchart ensures that investigations are performed consistently, efficiently, and in a compliant manner. It prevents ad-hoc, undocumented troubleshooting that can invalidate results and lead to audit findings.", regulatory="This visualizes the logical, documented process required for any laboratory investigation (**21 CFR 211.192**). It shows that actions are proceduralized and that the path to resolution is scientifically sound.")
-    st.graphviz_chart('''digraph OOS_Flowchart {rankdir=TB; node [shape=box, style=rounded]; start [label="OOS Result Detected"]; confirm [label="Phase 1a: Confirm Result \n(e.g., check calculations, re-inject)"]; investigate [label="Phase 1b: Formal Lab Investigation\n(Use Fishbone RCA)"]; assignable_cause [label="Assignable Cause Found?", shape=diamond]; capa [label="Implement CAPA\n(e.g., retrain analyst, service instrument)"]; invalidate [label="Invalidate Initial Result"]; retest [label="Perform Retest per SOP"]; end [label="Close Investigation"]; start -> confirm; confirm -> investigate; investigate -> assignable_cause; assignable_cause -> capa [label="Yes"]; capa -> invalidate -> retest -> end; assignable_cause -> no_cause [label="No"]; no_cause [label="Phase 2: Full-Scale Investigation\n(Involve other departments)"];}''')
-    st.success("**Actionable Insight:** This flowchart serves as a universal guide for the team. In a recent event, an analyst followed this procedure, quickly identified an obvious calculation error at the 'Confirm Result' stage, corrected it, and prevented the need for a full-scale, time-consuming investigation. This saved significant resources.")
-
+    st.success("**Actionable Insight:** The investigation team uses this structured tool to brainstorm. After testing several hypotheses, the team confirmed through re-analysis with a freshly prepared standard that the **'Reference standard degraded'** (under 'Material') was the true root cause. **Decision:** A CAPA will be initiated to revise the reference standard management SOP to include more frequent stability checks.")
 # ======================================================================================
 # SECTION 5: PAGE RENDERING FUNCTIONS
 # ======================================================================================
