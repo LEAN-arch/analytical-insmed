@@ -1,5 +1,6 @@
 # ===================================================================
 # Requirements for the AD Ops Command Center Streamlit Application
+# v2.0 - Added shap for Explainable AI
 # ===================================================================
 # To install these dependencies, run:
 # pip install -r requirements.txt
@@ -17,11 +18,17 @@ numpy==1.26.4
 # Advanced data visualization for creating interactive charts and graphs
 plotly==5.20.0
 
-# Machine Learning library for predictive models (Random Forest) and data preprocessing (PolynomialFeatures)
+# Machine Learning library for predictive models and data preprocessing
 scikit-learn==1.4.2
 
-# Scientific computing library, used for statistical functions (linregress, t-test, etc.)
+# Scientific computing library, used for statistical functions
 scipy==1.13.0
 
-# Statistical models, used specifically for time series forecasting (SimpleExpSmoothing)
+# Statistical models, used specifically for time series forecasting
 statsmodels==0.14.2
+
+# Explainable AI (XAI) library for interpreting model predictions (NEW)
+shap==0.45.0
+
+# Core plotting library, a dependency for SHAP plots (NEW)
+matplotlib==3.8.4
