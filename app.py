@@ -76,6 +76,7 @@ def st_shap(plot, height=None):
 # ======================================================================================
 # SECTION 3: DATA GENERATION
 # ======================================================================================
+# Corrected 'generate_master_data' function
 @st.cache_data(ttl=3600)
 def generate_master_data():
     np.random.seed(42)
@@ -91,13 +92,21 @@ def generate_master_data():
     imr_data = np.random.normal(99.5, 0.1, 100); imr_data[80:] -= 0.25; imr_df = pd.DataFrame({'Purity': imr_data, 'Date': pd.to_datetime(pd.date_range(start='2023-01-01', periods=100, freq='D'))})
     cpk_data = np.random.normal(50.5, 0.25, 150); cpk_df = pd.DataFrame({'Titer': cpk_data})
     
+    # --- Hotelling T² data generation with fix ---
     mean_vec = [95, 1.0e13]
     std_devs = [1.5, 0.1e13]
     correlation = 0.7
-    cov_mat = [[std_devs[0]**2, correlation * std_devs[0] * std_devs[1]], [correlation * std_devs[0] * std_devs[1], std_devs[1]**2]]
-    t2_data_in = np.random.multivariate_normal(mean_vec, cov_mat, 30); t2_outlier = [97.5, 0.9e13]; t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]]); t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer_vg_mL'])
+    cov_mat = [[std_devs[0]**2, correlation * std_devs[0] * std_devs[1]], 
+               [correlation * std_devs[0] * std_devs[1], std_devs[1]**2]]
     
-    # DEBUG FIX: Use 'ME' for month-end frequency instead of the deprecated 'M'.
+    # DEBUG FIX: Enforce numerical symmetry to prevent floating-point-related RuntimeWarning.
+    cov_mat = (np.array(cov_mat) + np.array(cov_mat).T) / 2
+    
+    t2_data_in = np.random.multivariate_normal(mean_vec, cov_mat, 30)
+    t2_outlier = [97.5, 0.9e13]
+    t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]])
+    t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer_vg_mL'])
+    
     p_data = {'Month': pd.to_datetime(pd.date_range(start='2023-01-01', periods=12, freq='ME')), 'SSTs_Run': np.random.randint(40, 60, 12)}; p_df = pd.DataFrame(p_data); p_df['SSTs_Failed'] = np.random.binomial(n=p_df['SSTs_Run'], p=0.05); p_df.loc[9, 'SSTs_Failed'] = 8
     
     np_df = pd.DataFrame({'Week': range(1, 21), 'Batches_Sampled': 50, 'Defective_Vials': np.random.binomial(n=50, p=0.04, size=20)}); np_df.loc[12, 'Defective_Vials'] = 7
@@ -113,7 +122,6 @@ def generate_master_data():
     # --- Data for PREDICTIVE HUB ---
     oos_df = pd.DataFrame({'Instrument': np.random.choice(['HPLC-01', 'HPLC-02', 'CE-01'], 100), 'Analyst': np.random.choice(['Smith', 'Lee', 'Chen'], 100), 'Molecule_Type': np.random.choice(['mAb', 'AAV'], 100), 'Root_Cause': np.random.choice(['Sample_Prep_Error', 'Instrument_Malfunction', 'Column_Issue'], 100, p=[0.5, 0.3, 0.2])})
     
-    # DEBUG FIX: Use min=0 instead of the deprecated lower=0 for the NumPy array .clip() method.
     backlog_vals = 10 + np.arange(104)*0.5 + np.random.normal(0, 5, 104) + np.sin(np.arange(104)/8)*5
     backlog_df = pd.DataFrame({'Week': pd.date_range('2022-01-01', periods=104, freq='W'), 'Backlog': backlog_vals.clip(min=0)})
     
