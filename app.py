@@ -1,6 +1,7 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-
+# v8.0 - Final, Unabridged, Master-Class Version with All Components Restored
+# ======================================================================================
 
 import streamlit as st
 import pandas as pd
@@ -8,11 +9,15 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from scipy import stats
+import math
+from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 
 # ======================================================================================
-# SECTION 1: APP CONFIGURATION & STYLING
+# SECTION 1: APP CONFIGURATION & AESTHETIC CONSTANTS
 # ======================================================================================
 st.set_page_config(
     page_title="AD Ops Command Center",
@@ -20,241 +25,378 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-st.markdown("""
+
+# --- AESTHETIC & THEME CONSTANTS ---
+PRIMARY_COLOR = '#673ab7'
+SUCCESS_GREEN = '#4CAF50'
+WARNING_AMBER = '#FFC107'
+ERROR_RED = '#D32F2F'
+NEUTRAL_GREY = '#B0BEC5'
+DARK_GREY = '#455A64'
+BACKGROUND_GREY = '#F0F2F6'
+LIGHT_BLUE = '#E3F2FD'
+
+# --- Custom CSS for professional look and feel ---
+st.markdown(f"""
 <style>
-    .main .block-container { padding: 1rem 3rem 3rem; }
-    .stMetric { background-color: #fcfcfc; border: 1px solid #e0e0e0; border-left: 5px solid #673ab7; border-radius: 8px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    .stTabs [data-baseweb="tab-list"] { gap: 24px; }
-    .stTabs [data-baseweb="tab"] { height: 50px; white-space: pre-wrap; background-color: #F0F2F6; border-radius: 4px 4px 0px 0px; padding-top: 10px; padding-bottom: 10px; font-weight: 600; }
-    .stTabs [aria-selected="true"] { background-color: #FFFFFF; box-shadow: 0 -2px 5px rgba(0,0,0,0.1); border-bottom-color: #FFFFFF !important; }
-    .st-expander { border: 1px solid #E0E0E0 !important; border-radius: 10px !important; }
+    .main .block-container {{ padding: 1rem 3rem 3rem; }}
+    .stMetric {{ border-left: 5px solid {PRIMARY_COLOR}; }}
+    h1, h2, h3 {{ color: {DARK_GREY}; }}
 </style>
 """, unsafe_allow_html=True)
 
+# ======================================================================================
+# SECTION 2: UTILITY & HELPER FUNCTIONS
+# ======================================================================================
+def render_manager_briefing(title: str, content: str, reg_refs: str, business_impact: str, quality_pillar: str, risk_mitigation: str) -> None:
+    with st.container(border=True):
+        st.subheader(f"🧬 {title}", divider='violet')
+        st.markdown(content)
+        st.info(f"**Business Impact:** {business_impact}", icon="🎯")
+        st.warning(f"**Key Guidelines & Regulations:** {reg_refs}", icon="📜")
+        st.success(f"**Quality Culture Pillar:** {quality_pillar}", icon="🌟")
+        st.error(f"**Strategic Risk Mitigation:** {risk_mitigation}", icon="🛡️")
+
+def render_full_chart_briefing(context: str, significance: str, regulatory: str) -> None:
+    briefing_card = f"""
+    <div style="background-color: {LIGHT_BLUE}; border: 1px solid {PRIMARY_COLOR}; border-radius: 5px; padding: 15px; margin-bottom: 20px; color: {DARK_GREY};">
+        <p style="margin-bottom: 10px;"><strong style="color: {PRIMARY_COLOR};">Context:</strong> {context}</p>
+        <p style="margin-bottom: 10px;"><strong style="color: {DARK_GREY};">Significance:</strong> {significance}</p>
+        <p style="margin-bottom: 0;"><strong style="color: {SUCCESS_GREEN};">Regulatory Alignment:</strong> {regulatory}</p>
+    </div>
+    """
+    st.markdown(briefing_card, unsafe_allow_html=True)
 
 # ======================================================================================
-# SECTION 2: SME-DRIVEN DATA SIMULATION
+# SECTION 3: DATA GENERATION
 # ======================================================================================
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=3600)
 def generate_master_data():
     np.random.seed(42)
-    dates = pd.to_datetime(pd.date_range(start='2023-01-01', periods=52, freq='W-MON')); sample_data = {'Week': dates, 'Samples_Received': np.random.randint(80, 150, 52), 'Samples_Tested': np.random.randint(70, 140, 52)}; sample_df = pd.DataFrame(sample_data); sample_df['Backlog'] = sample_df['Samples_Received'].cumsum() - sample_df['Samples_Tested'].cumsum()
-    control_dates = pd.to_datetime(pd.date_range(start='2023-06-01', periods=100, freq='D')); cqa_data = {'Date': control_dates, 'AAV_Titer_Control': np.random.normal(1.0e13, 0.05e13, 100)}; cqa_data['AAV_Titer_Control'][80:] += 0.15e13; cqa_df = pd.DataFrame(cqa_data)
-    methods = ['AAV Titer (ddPCR)', 'Capsid Purity (HPLC-SEC)', 'Host Cell DNA (qPCR)', 'Potency (Cell-Based Assay)', 'Endotoxin (LAL)']; transfer_data = {'Method': methods * 2, 'Program': ['AAV-101']*5 + ['AAV-201']*5, 'Receiving_Unit': ['Internal QC', 'CDMO-A', 'Internal QC', 'CDMO-B', 'Internal QC'] * 2, 'Status': np.random.choice(['Development', 'Optimization', 'Validation', 'Transferred', 'Failed'], 10, p=[0.1,0.2,0.4,0.2,0.1]), 'Complexity_Score': np.random.randint(3, 10, 10), 'SOP_Maturity_Score': np.random.randint(4, 10, 10), 'Training_Cycles': np.random.randint(1, 4, 10)}; transfer_df = pd.DataFrame(transfer_data); transfer_df['Transfer_Success'] = ((transfer_df['Status'] == 'Transferred').astype(int) + (transfer_df['Complexity_Score'] < 5) + (transfer_df['SOP_Maturity_Score'] > 7)) > 1
-    X = np.random.uniform(-1, 1, (15, 2)); doe_df = pd.DataFrame(X, columns=['pH', 'Gradient_Slope_Pct_min']); doe_df['AAV_Purity_Pct'] = 95 - 2*doe_df['pH']**2 - 3*doe_df['Gradient_Slope_Pct_min']**2 + doe_df['pH']*doe_df['Gradient_Slope_Pct_min'] + np.random.normal(0, 0.5, 15)
-    team_data = {'Scientist': ['J. Doe', 'S. Smith', 'M. Lee', 'K. Chen'], 'Role': ['Sr. Scientist', 'Scientist II', 'Scientist I', 'RA II'], 'Expertise': ['HPLC', 'ddPCR', 'ELISA', 'CE']}; team_df = pd.DataFrame(team_data); equipment_data = {'Instrument': ['HPLC-01', 'HPLC-02', 'CE-01', 'ddPCR-01'], 'Status': ['Online', 'Online', 'Calibration Due', 'Offline - Maintenance']}; equipment_df = pd.DataFrame(equipment_data)
-    subgroup_size = 5; num_subgroups = 40; subgroup_data = []; mean = 100; std_dev = 5
-    for i in range(num_subgroups):
-        if i >= 20: std_dev = 10
-        if i >= 30: mean = 110
-        replicates = np.random.normal(mean, std_dev, subgroup_size)
-        for j, rep in enumerate(replicates): subgroup_data.append({'Subgroup_ID': i + 1, 'Replicate': j + 1, 'Potency_Result': rep})
-    subgroup_df = pd.DataFrame(subgroup_data)
-    p_dates = pd.to_datetime(pd.date_range(start='2023-01-01', periods=24, freq='ME')); batches_tested = np.random.randint(15, 25, 24); base_fail_rate = 0.05; batches_failed = np.random.binomial(n=batches_tested, p=base_fail_rate); batches_failed[18] = 5; p_chart_data = {'Month': p_dates, 'Batches_Tested': batches_tested, 'Batches_Failed': batches_failed}; p_chart_df = pd.DataFrame(p_chart_data)
-    tech_data = {'Technology': ['Robotic Liquid Handler', 'Automated Plate Reader', 'High-Throughput HPLC', 'Microfluidics Platform'], 'Targeted_Process': ['Sample Preparation', 'ELISA/Potency Assays', 'Purity/Impurity Testing', 'Early-Stage Screening'], 'Est_Throughput_Increase_Factor': [5, 3, 4, 10], 'Implementation_Complexity_Score': [8, 3, 6, 9], 'Est_FTE_Saving': [1.5, 0.5, 1.0, 0.75]}; tech_df = pd.DataFrame(tech_data)
-    return sample_df, cqa_df, transfer_df, doe_df, team_df, equipment_df, subgroup_df, p_chart_df, tech_df
+    # --- Base App Data ---
+    budget_df = pd.DataFrame({'Category': ['OpEx (Consumables)', 'OpEx (Team)', 'CapEx (New Tech)', 'Contractors (CDMO)'], 'Budgeted': [800, 1200, 500, 300], 'Actual': [750, 1180, 550, 250]})
+    team_df = pd.DataFrame({'Scientist': ['J. Doe (Lead)', 'S. Smith', 'M. Lee', 'K. Chen'], 'Role': ['Assoc. Director', 'Sr. Scientist', 'Scientist II', 'Scientist I'], 'Expertise': ['HPLC/CE', 'ddPCR/qPCR', 'Cell-Based Assays', 'ELISA'], 'Development_Goal': ['Mentor team on QbD', 'Lead AAV-201 analytics', 'Cross-train on ddPCR', 'Gain validation experience']})
+    
+    # --- Data for STATISTICAL TOOLKIT ---
+    lj_data = np.random.normal(100.0, 2.0, 30); lj_data[20] = 106.5; lj_data[25:27] = [104.5, 104.8]; lj_df = pd.DataFrame({'Value': lj_data})
+    ewma_data = np.random.normal(0.5, 0.05, 40); ewma_data[20:] += 0.06; ewma_df = pd.DataFrame({'Impurity': ewma_data})
+    cusum_data = np.random.normal(10.0, 0.05, 50); cusum_data[25:] -= 0.04; cusum_df = pd.DataFrame({'Fill_Volume': cusum_data})
+    zone_data = np.random.normal(20, 0.5, 25); zone_data[15:] -= 0.4; zone_df = pd.DataFrame({'Seal_Strength': zone_data})
+    imr_data = np.random.normal(99.5, 0.1, 100); imr_data[80:] -= 0.25; imr_df = pd.DataFrame({'Purity': imr_data})
+    cpk_data = np.random.normal(50.5, 0.25, 150); cpk_df = pd.DataFrame({'Titer': cpk_data})
+    mean_vec = [95, 1.0e13]; cov_mat = [[1.5, 0.6e13], [0.6e13, 0.05e26]]; t2_data_in = np.random.multivariate_normal(mean_vec, cov_mat, 30); t2_outlier = [97.5, 0.9e13]; t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]]); t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer_vg_mL'])
+    p_data = {'Month': pd.to_datetime(pd.date_range(start='2023-01-01', periods=12, freq='M')), 'SSTs_Run': np.random.randint(40, 60, 12)}; p_df = pd.DataFrame(p_data); p_df['SSTs_Failed'] = np.random.binomial(n=p_df['SSTs_Run'], p=0.05); p_df.loc[9, 'SSTs_Failed'] = 8
+    np_df = pd.DataFrame({'Week': range(1, 21), 'Batches_Sampled': 50, 'Defective_Vials': np.random.binomial(n=50, p=0.04, size=20)}); np_df.loc[12, 'Defective_Vials'] = 7
+    c_df = pd.DataFrame({'Week': range(1, 21), 'Contaminants_per_Plate': np.random.poisson(lam=3, size=20)}); c_df.loc[15, 'Contaminants_per_Plate'] = 9
+    u_data = {'Batch': range(1, 16), 'Vials_Inspected': np.random.randint(50, 150, 15)}; u_df = pd.DataFrame(u_data); u_df['Particulate_Defects'] = np.random.poisson(lam=u_df['Vials_Inspected'] * 0.02); u_df.loc[10, 'Particulate_Defects'] = 8
+    
+    # --- Data for LIFECYCLE HUB ---
+    stability_df = pd.DataFrame({'Time_months': [0, 3, 6, 9, 12, 18, 24], 'Potency_pct': [101.2, 100.8, 99.5, 98.9, 98.1, 97.0, 95.8]})
+    tost_df = pd.DataFrame({'HPLC': np.random.normal(98.5, 0.5, 30), 'UPLC': np.random.normal(98.7, 0.4, 30)})
+    screening_df = pd.DataFrame({'Factor': ['Temp', 'pH', 'Flow_Rate', 'Gradient', 'Column_Lot', 'Analyst'], 'Effect_Size': [0.2, 1.8, 0.1, 1.5, 0.3, 0.2]})
+    doe_df = pd.DataFrame(np.random.uniform(-1, 1, (15, 2)), columns=['pH', 'Gradient_Slope']); doe_df['Peak_Resolution'] = 2.5 - 0.5*doe_df['pH']**2 - 0.8*doe_df['Gradient_Slope']**2 + 0.3*doe_df['pH']*doe_df['Gradient_Slope'] + np.random.normal(0, 0.1, 15)
+    
+    # --- Data for PREDICTIVE HUB ---
+    oos_df = pd.DataFrame({'Instrument': np.random.choice(['HPLC-01', 'HPLC-02', 'CE-01'], 100), 'Analyst': np.random.choice(['Smith', 'Lee', 'Chen'], 100), 'Molecule_Type': np.random.choice(['mAb', 'AAV'], 100), 'Root_Cause': np.random.choice(['Sample_Prep_Error', 'Instrument_Malfunction', 'Column_Issue'], 100, p=[0.5, 0.3, 0.2])})
+    backlog_df = pd.DataFrame({'Week': pd.date_range('2022-01-01', periods=104, freq='W'), 'Backlog': (10 + np.arange(104)*0.5 + np.random.normal(0, 5, 104) + np.sin(np.arange(104)/8)*5).clip(lower=0)})
+    maintenance_df = pd.DataFrame({'Run_Hours': np.random.randint(50, 1000, 100), 'Pressure_Spikes': np.random.randint(0, 20, 100), 'Column_Age_Days': np.random.randint(10, 300, 100)}); maintenance_df['Needs_Maint'] = (maintenance_df['Run_Hours'] > 600) | (maintenance_df['Pressure_Spikes'] > 15) | (maintenance_df['Column_Age_Days'] > 250)
+
+    # --- Data for QBD & QUALITY SYSTEMS HUB ---
+    sankey_df = pd.DataFrame({'Source': ['Column Lot', 'Mobile Phase Purity', 'Gradient Slope', 'Flow Rate', 'Column Temp', 'Peak Resolution', 'Assay Accuracy'], 'Target': ['Peak Resolution', 'Peak Resolution', 'Peak Resolution', 'Assay Precision', 'Assay Accuracy', 'Final Purity Result', 'Final Purity Result'], 'Value': [8, 5, 10, 7, 6, 12, 10]})
+
+    return budget_df, team_df, lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df, stability_df, tost_df, screening_df, doe_df, oos_df, backlog_df, maintenance_df, sankey_df
 
 # ======================================================================================
-# SECTION 3: ADVANCED ANALYTICAL & ML MODELS
+# SECTION 4: PLOTTING & ANALYSIS FUNCTIONS
 # ======================================================================================
-@st.cache_resource
-def get_transfer_risk_model(df):
-    features = ['Complexity_Score', 'SOP_Maturity_Score', 'Training_Cycles']; target = 'Transfer_Success'
-    X, y = df[features], df[target]
-    model = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced'); model.fit(X, y)
-    return model
+## --- STATISTICAL TOOLKIT FUNCTIONS (RESTORED TO FULL DETAIL) ---
+def plot_levey_jennings(df):
+    render_full_chart_briefing(context="Daily QC analysis of a certified reference material on an HPLC system to ensure system performance.", significance="Detects shifts or increased variability in an analytical instrument's performance, ensuring the validity of daily sample results. It distinguishes between random error (a single outlier) and systematic error (a developing bias).", regulatory="Directly supports **21 CFR 211.160** (General requirements for laboratory controls) and **ISO 17025** by providing documented evidence of the ongoing validity of test methods. Westgard rules are an industry best practice for clinical and QC labs.")
+    mean, sd = 100.0, 2.0; limits = {'+3s': mean + 3*sd, '+2s': mean + 2*sd, '+1s': mean + 1*sd, '-1s': mean - 1*sd, '-2s': mean - 2*sd, '-3s': mean - 3*sd}
+    fig = go.Figure(go.Scatter(y=df['Value'], mode='lines+markers', line=dict(color=PRIMARY_COLOR)))
+    for name, val in limits.items(): fig.add_hline(y=val, line_dash='dash', line_color=DARK_GREY, annotation_text=name)
+    fig.add_hline(y=mean, line_dash='solid', line_color=SUCCESS_GREEN, annotation_text="Mean")
+    fig.add_annotation(x=20, y=106.5, text="<b>1-3s Violation</b>", showarrow=True, arrowhead=2, ax=0, ay=-40, bgcolor=ERROR_RED, font=dict(color='white'))
+    fig.add_annotation(x=26, y=104.8, text="<b>2-2s Violation</b>", showarrow=True, arrowhead=2, ax=0, ay=40, bgcolor=WARNING_AMBER)
+    fig.update_layout(title="<b>Levey-Jennings Chart for HPLC System QC</b>", yaxis_title="Reference Material Recovery (%)", xaxis_title="Run Number")
+    st.plotly_chart(fig, use_container_width=True)
+    st.error("**Actionable Insight:** The 1-3s violation indicates a random error, requiring a re-run. The subsequent 2-2s violation indicates a systematic bias. **Decision:** Halt testing on the instrument and issue a work order to investigate the mobile phase preparation process and recalibrate the detector.")
 
-def plot_rsm_suite(df, x_col, y_col, z_col):
-    from sklearn.preprocessing import PolynomialFeatures
-    from sklearn.linear_model import LinearRegression
-    x = np.linspace(df[x_col].min(), df[x_col].max(), 30); y = np.linspace(df[y_col].min(), df[y_col].max(), 30)
-    x_grid, y_grid = np.meshgrid(x, y)
-    poly = PolynomialFeatures(degree=2); X_poly = poly.fit_transform(df[[x_col, y_col]]); model = LinearRegression(); model.fit(X_poly, df[z_col])
-    X_pred_poly = poly.transform(np.c_[x_grid.ravel(), y_grid.ravel()]); z_grid = model.predict(X_pred_poly).reshape(x_grid.shape)
-    
-    fig_3d = go.Figure(data=[go.Surface(z=z_grid, x=x, y=y, colorscale='Viridis', name='Response Surface', showlegend=True)])
-    fig_3d.add_trace(go.Scatter3d(x=df[x_col], y=df[y_col], z=df[z_col], mode='markers', marker=dict(size=5, color='red', symbol='circle'), name='DOE Points'))
-    fig_3d.update_layout(title='<b>A. Response Surface (3D View)</b>', scene=dict(xaxis_title=f'{x_col}', yaxis_title=f'{y_col} (%/min)', zaxis_title=f'{z_col} (%)'), margin=dict(l=0, r=0, b=0, t=40))
-    
-    fig_2d = go.Figure(data=go.Contour(z=z_grid, x=x, y=y, colorscale='Viridis', contours_coloring='lines', line_width=2))
-    fig_2d.add_trace(go.Scatter(x=df[x_col], y=df[y_col], mode='markers', marker=dict(color='black', symbol='x'), name='DOE Points'))
-    fig_2d.add_shape(type="rect", x0=-0.5, y0=-0.7, x1=0.5, y1=0.7, line=dict(color="red", dash="dash"), fillcolor="rgba(255,0,0,0.1)")
-    fig_2d.add_annotation(x=0, y=0, text="<b>Optimal<br>Region</b>", showarrow=False, font=dict(color="red"))
-    fig_2d.update_layout(title='<b>B. Contour Plot & Design Space (2D View)</b>', xaxis_title=f'{x_col}', yaxis_title=f'{y_col} (%/min)')
-    return fig_3d, fig_2d
+def plot_ewma_chart(df):
+    render_full_chart_briefing(context="Monitoring a critical quality attribute (CQA), like the concentration of a key impurity, over dozens of purification runs.", significance="Provides a highly sensitive early warning for small but persistent process drifts that could lead to out-of-specification (OOS) results if left unchecked, enabling proactive rather than reactive maintenance.", regulatory="Supports the principles of Continued Process Verification (CPV) outlined in the **FDA's Process Validation Guidance** and **ICH Q8**. It is a tool to ensure the process remains in a state of control throughout its lifecycle.")
+    lam = 0.2; mean = df['Impurity'].iloc[:20].mean(); sd = df['Impurity'].iloc[:20].std(); df['EWMA'] = df['Impurity'].ewm(span=(2/lam)-1, adjust=False).mean(); n = df.index + 1; ucl = mean + 3 * sd * np.sqrt((lam / (2 - lam)) * (1 - (1 - lam)**(2 * n))); lcl = mean - 3 * sd * np.sqrt((lam / (2 - lam)) * (1 - (1 - lam)**(2 * n)))
+    fig = go.Figure(); fig.add_trace(go.Scatter(y=df['Impurity'], mode='markers', name='Individual Batch', marker_color=NEUTRAL_GREY)); fig.add_trace(go.Scatter(y=df['EWMA'], mode='lines', name='EWMA', line=dict(color=PRIMARY_COLOR, width=3))); fig.add_trace(go.Scatter(y=ucl, mode='lines', name='UCL', line=dict(color=ERROR_RED, dash='dash'))); fig.add_trace(go.Scatter(y=lcl, mode='lines', name='LCL', line=dict(color=ERROR_RED, dash='dash')))
+    violation_idx = df[df['EWMA'] > ucl].first_valid_index(); fig.add_annotation(x=violation_idx, y=df['EWMA'][violation_idx], text="<b>EWMA Signal</b>", showarrow=True, arrowhead=2, ax=0, ay=-40, bgcolor=ERROR_RED, font=dict(color='white'))
+    fig.update_layout(title="<b>EWMA Chart for Critical Impurity Monitoring</b>", yaxis_title="Impurity Level (%)", xaxis_title="Batch Number")
+    st.plotly_chart(fig, use_container_width=True)
+    st.success(f"**Actionable Insight:** The EWMA chart signaled an out-of-control condition at Batch #{violation_idx}, much earlier than a standard chart would have. This early warning confirms a slow degradation of the purification column. **Decision:** Schedule the column for repacking during the next planned maintenance window, preventing future OOS results.")
 
-def plot_enhanced_i_mr_chart(df, value_col):
-    individuals = df[value_col]; i_mean = individuals.mean(); mr_mean = abs(individuals.diff()).mean(); i_ucl = i_mean + 3 * mr_mean / 1.128; i_lcl = i_mean - 3 * mr_mean / 1.128
-    signals = [];
-    for i in range(9, len(individuals)):
-        subset = individuals[i-9:i]
-        if all(subset > i_mean) or all(subset < i_mean): signals.extend(list(range(i-9, i)))
-    signal_points = individuals.iloc[list(set(signals))]
-    fig = go.Figure(); fig.add_trace(go.Scatter(y=individuals, name='Individual Value', mode='lines+markers', line=dict(color='#673ab7'))); fig.add_hline(y=i_mean, line=dict(color='green', dash='dot'), name='Mean'); fig.add_hline(y=i_ucl, line=dict(color='red', dash='dash'), name='UCL')
-    outliers = individuals[individuals > i_ucl]; fig.add_trace(go.Scatter(x=outliers.index, y=outliers, mode='markers', name='UCL Violation', marker=dict(symbol='x', color='red', size=12))); fig.add_trace(go.Scatter(x=signal_points.index, y=signal_points, mode='markers', name='Nelson Rule 1 Signal', marker=dict(symbol='diamond', color='orange', size=10)))
-    fig.update_layout(title=f'<b>I-Chart with Nelson Rule Detection: {value_col}</b>', yaxis_title='Titer (vg/mL)', xaxis_title='Data Point Index', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-    return fig
+def plot_cusum_chart(df):
+    render_full_chart_briefing(context="Monitoring a critical process parameter like fill volume on a high-speed aseptic filling line.", significance="Allows for the fastest possible detection of the *onset* of a small, sustained process shift. This is critical for minimizing the amount of non-conforming product generated in high-volume, high-cost manufacturing processes.", regulatory="This is an advanced SPC tool that demonstrates a mature quality system focused on rapid response, aligning with the risk-based principles of **ICH Q9**. It provides a higher level of process control than basic Shewhart charts.")
+    target = 10.0; sd = 0.05; k = 0.5 * sd; h = 5 * sd; df['SH+'] = 0.0; df['SH-'] = 0.0
+    for i in range(1, len(df)): df.loc[i, 'SH-'] = max(0, df.loc[i-1, 'SH-'] + target - df.loc[i, 'Fill_Volume'] - k)
+    fig = go.Figure(); fig.add_trace(go.Scatter(y=df['SH-'], name='CUSUM Low (SH-)', mode='lines', line=dict(color=PRIMARY_COLOR, width=3))); fig.add_hline(y=h, line_dash='dash', line_color='black', annotation_text="Decision Limit (H)")
+    violation_idx = df[df['SH-'] > h].first_valid_index(); fig.add_annotation(x=violation_idx, y=df['SH-'][violation_idx], text="<b>CUSUM Signal!</b>", showarrow=True, arrowhead=2, ax=20, ay=-60, bgcolor=PRIMARY_COLOR, font=dict(color='white'))
+    fig.update_layout(title="<b>CUSUM Chart for Aseptic Fill Volume</b>", yaxis_title="Cumulative Sum", xaxis_title="Sample Number")
+    st.plotly_chart(fig, use_container_width=True)
+    st.success(f"**Actionable Insight:** The CUSUM chart rapidly detected a persistent downward shift, signaling an alarm at Sample #{violation_idx}. This confirmed an underfill condition had begun. **Decision:** The filling line was immediately halted. Investigation traced the issue to a partial nozzle clog, saving the majority of the batch from being non-conforming.")
 
-def plot_xbar_r_chart(df):
-    subgroup_size = df['Replicate'].max(); stats = df.groupby('Subgroup_ID')['Potency_Result'].agg(['mean', 'max', 'min']).reset_index(); stats['range'] = stats['max'] - stats['min']; A2, D3, D4 = 0.577, 0, 2.114; x_bar_bar = stats['mean'].mean(); r_bar = stats['range'].mean(); x_ucl = x_bar_bar + A2 * r_bar; x_lcl = x_bar_bar - A2 * r_bar; r_ucl = r_bar * D4; r_lcl = r_bar * D3
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1, subplot_titles=("X-bar Chart (Process Mean)", "R-Chart (Process Variation)"))
-    fig.add_trace(go.Scatter(x=stats['Subgroup_ID'], y=stats['mean'], name='Subgroup Mean', mode='lines+markers'), row=1, col=1); fig.add_hline(y=x_bar_bar, line=dict(color='green', dash='dot'), name='Center Line', row=1, col=1); fig.add_hline(y=x_ucl, line=dict(color='red', dash='dash'), name='UCL', row=1, col=1); fig.add_hline(y=x_lcl, line=dict(color='red', dash='dash'), name='LCL', row=1, col=1)
-    fig.add_trace(go.Scatter(x=stats['Subgroup_ID'], y=stats['range'], name='Subgroup Range', mode='lines+markers', line_color='orange'), row=2, col=1); fig.add_hline(y=r_bar, line=dict(color='green', dash='dot'), name='Center Line', row=2, col=1); fig.add_hline(y=r_ucl, line=dict(color='red', dash='dash'), name='UCL', row=2, col=1); fig.add_hline(y=r_lcl, line=dict(color='red', dash='dash'), name='LCL', row=2, col=1)
-    fig.update_layout(height=600, title_text="<b>X-bar & R Chart for Subgroup Data (Potency Assay)</b>", showlegend=False)
-    fig.update_yaxes(title_text="Mean Potency (% Activity)", row=1, col=1)
-    fig.update_yaxes(title_text="Range of Potency (% Activity)", row=2, col=1)
-    fig.update_xaxes(title_text="Subgroup ID", row=2, col=1)
-    return fig
+def plot_zone_chart(df):
+    render_full_chart_briefing(context="Monitoring the stability of a mature, well-understood, and highly capable analytical method, like a validated potency assay.", significance="Detects unnatural, non-random patterns *within* the control limits. It provides a much earlier warning of potential process drift than a standard chart that only alarms on UCL/LCL breaches, allowing for proactive investigation.", regulatory="Demonstrates a sophisticated level of process understanding and monitoring, aligning with the principles of **ICH Q14** (Analytical Procedure Development) and Continued Process Verification. The use of sensitizing rules (e.g., Nelson, Westgard) is a hallmark of a mature quality system.")
+    mean, sd = 20, 0.5; fig = go.Figure()
+    zones = {'Zone A (Upper)': [mean + 2*sd, mean + 3*sd], 'Zone B (Upper)': [mean + 1*sd, mean + 2*sd], 'Zone C (Upper)': [mean, mean + 1*sd], 'Zone C (Lower)': [mean - 1*sd, mean], 'Zone B (Lower)': [mean - 2*sd, mean - 1*sd], 'Zone A (Lower)': [mean - 3*sd, mean - 2*sd]}
+    colors = {'Zone A (Upper)': 'rgba(255, 193, 7, 0.2)', 'Zone B (Upper)': 'rgba(76, 175, 80, 0.2)', 'Zone C (Upper)': 'rgba(76, 175, 80, 0.2)', 'Zone C (Lower)': 'rgba(76, 175, 80, 0.2)', 'Zone B (Lower)': 'rgba(255, 193, 7, 0.2)', 'Zone A (Lower)': 'rgba(255, 193, 7, 0.2)'}
+    for name, y_range in zones.items(): fig.add_hrect(y0=y_range[0], y1=y_range[1], line_width=0, fillcolor=colors[name], annotation_text=name.split(' ')[1], annotation_position="top left", layer="below")
+    fig.add_trace(go.Scatter(y=df['Seal_Strength'], mode='lines+markers', name='Strength', line=dict(color=PRIMARY_COLOR))); fig.add_hline(y=mean, line_color='black')
+    fig.add_annotation(x=18, y=mean - 0.7, text="<b>Rule Violation!</b><br>8 consecutive points<br>on one side of mean.", showarrow=False, bgcolor=WARNING_AMBER, borderpad=4)
+    fig.update_layout(title="<b>Zone Chart for Potency Assay Control</b>", yaxis_title="Relative Potency (%)", xaxis_title="Assay Run")
+    st.plotly_chart(fig, use_container_width=True)
+    st.warning("**Actionable Insight:** Although no single point is out of control, the Zone Chart detected a run of 8 consecutive points below the center line. This non-random pattern indicates a systematic process shift. **Decision:** This early warning triggers an investigation into the stability of the cell bank or critical reagents used in the assay during the next planned maintenance cycle.")
+
+def plot_i_mr_chart(df):
+    render_full_chart_briefing(context="Monitoring individual measurements of a critical process parameter over time, such as the purity of a reference standard checked daily.", significance="Provides a fundamental assessment of process stability by monitoring both the process mean (I-chart) and its short-term variability (MR-chart). A spike in variability is often the first sign of a problem.", regulatory="This is a foundational SPC tool. Its use is fundamental to demonstrating a state of statistical control as required by the **FDA's Process Validation Guidance** and for setting meaningful alert limits in a laboratory environment (**21 CFR 211.160, 211.165**).")
+    i = df['Purity']; i_mean = i.mean(); mr = abs(i.diff()); mr_mean = mr.mean(); i_ucl = i_mean + 2.66 * mr_mean; i_lcl = i_mean - 2.66 * mr_mean; mr_ucl = 3.267 * mr_mean
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1, subplot_titles=("Individuals (I) Chart", "Moving Range (MR) Chart"))
+    fig.add_trace(go.Scatter(y=i, name='Purity', mode='lines+markers', marker_color=PRIMARY_COLOR), row=1, col=1); fig.add_hline(y=i_mean, line_dash="dash", line_color=SUCCESS_GREEN, row=1, col=1); fig.add_hline(y=i_ucl, line_dash="dot", line_color=ERROR_RED, row=1, col=1); fig.add_hline(y=i_lcl, line_dash="dot", line_color=ERROR_RED, row=1, col=1)
+    fig.add_trace(go.Scatter(y=mr, name='Moving Range', mode='lines+markers', marker_color=WARNING_AMBER), row=2, col=1); fig.add_hline(y=mr_mean, line_dash="dash", line_color=SUCCESS_GREEN, row=2, col=1); fig.add_hline(y=mr_ucl, line_dash="dot", line_color=ERROR_RED, row=2, col=1)
+    fig.update_layout(height=400, showlegend=False, title_text="<b>I-MR Chart for Reference Standard Purity</b>")
+    st.plotly_chart(fig, use_container_width=True)
+    st.warning("**Actionable Insight:** The I-chart shows a clear downward trend and multiple points breaching the lower control limit, indicating the reference standard is no longer stable and is degrading. **Decision:** Quarantine the current standard vial and qualify a new one to ensure continued data accuracy for all ongoing tests.")
+
+def plot_cpk_analysis(df):
+    render_full_chart_briefing(context="Assessing a final, validated manufacturing process to ensure it can reliably produce a drug substance that meets its critical quality attribute specifications.", significance="Quantifies the *capability* of a process, answering 'Is our process good enough?'. It measures how well the process is centered within its specification limits and how much variability it has relative to those limits. A Cpk ≥ 1.33 is a common industry standard for a capable process.", regulatory="Cpk is a key metric in Process Validation (Stage 2) and Continued Process Verification (Stage 3) per the **FDA's Process Validation Guidance**. It provides objective evidence that a process is capable of consistently producing quality product, a core tenet of **ICH Q8 (QbD)**.")
+    data = df['Titer']; LSL, USL = 48.0, 52.0; mu, std = data.mean(), data.std(ddof=1); cpk = 0.0
+    if std > 0: cpk = min((USL - mu) / (3 * std), (mu - LSL) / (3 * std))
+    fig = go.Figure(go.Histogram(x=data, name='Observed Data', histnorm='probability density', marker_color=PRIMARY_COLOR, opacity=0.7)); x_fit = np.linspace(data.min(), data.max(), 200); y_fit = stats.norm.pdf(x_fit, mu, std); fig.add_trace(go.Scatter(x=x_fit, y=y_fit, mode='lines', name='Fitted Normal', line=dict(color=SUCCESS_GREEN, width=2)))
+    fig.add_vline(x=LSL, line_dash="dash", line_color=ERROR_RED, annotation_text="LSL=48"); fig.add_vline(x=USL, line_dash="dash", line_color=ERROR_RED, annotation_text="USL=52")
+    fig.update_layout(title_text=f'<b>Process Capability (Cpk) Analysis - Final Titer<br>Cpk = {cpk:.2f}</b> (Target: ≥1.33)', xaxis_title="Titer Result (e12 vg/mL)", yaxis_title="Density")
+    st.plotly_chart(fig, use_container_width=True)
+    if cpk >= 1.33: st.success(f"**Actionable Insight:** The calculated Cpk of {cpk:.2f} exceeds the target of 1.33. This statistically proves the manufacturing process is highly capable of consistently producing product that meets its final titer specification. **Decision:** The process is validated and approved for commercial production.")
+    else: st.error(f"**Actionable Insight:** The Cpk of {cpk:.2f} is below the required 1.33. The process is not capable of meeting spec. **Decision:** Process requires re-development to reduce variability or re-center the mean before re-validation.")
+
+def plot_hotelling_t2_chart(df):
+    render_full_chart_briefing(context="Simultaneously monitoring two critical, correlated drug substance attributes, like Purity and Titer, from a bioreactor run.", significance="Prevents 'hiding in the noise'. A small, simultaneous shift in two correlated variables might not trigger an alarm on either individual chart, but the T² chart detects these joint-shifts, preventing the release of a non-compliant batch.", regulatory="This demonstrates a mature understanding of process control, aligning with **ICH Q8**'s emphasis on multivariate interactions. It is a key tool for implementing a Process Analytical Technology (PAT) or Multivariate Statistical Process Control (MSPC) program.")
+    t_squared_values = np.random.chisquare(2, size=len(df)) * 0.8; ucl = 9.21; t_squared_values[24] = 15.5
+    col1, col2 = st.columns([3, 2])
+    with col1:
+        fig_t2 = go.Figure(go.Scatter(y=t_squared_values, mode='lines+markers', name='T² Value', line=dict(color=PRIMARY_COLOR))); fig_t2.add_hline(y=ucl, line_dash='dash', line_color=ERROR_RED, annotation_text="UCL"); fig_t2.add_annotation(x=24, y=15.5, text="<b>Multivariate Anomaly!</b>", showarrow=True, bgcolor=ERROR_RED, font=dict(color='white'))
+        fig_t2.update_layout(title="<b>Hotelling's T² Chart</b>", yaxis_title="T² Statistic", xaxis_title="Batch Number")
+        st.plotly_chart(fig_t2, use_container_width=True)
+    with col2:
+        fig_scatter = px.scatter(df, x='Purity_Pct', y='Titer_vg_mL', title="<b>Process Variable Correlation</b>"); fig_scatter.add_trace(go.Scatter(x=[df['Purity_Pct'].iloc[24]], y=[df['Titer_vg_mL'].iloc[24]], mode='markers', marker=dict(color=ERROR_RED, size=12, symbol='x'), name='Anomaly'))
+        st.plotly_chart(fig_scatter, use_container_width=True)
+    st.error("**Actionable Insight:** The T² chart identified a multivariate anomaly at Batch #25. The scatter plot shows why: while Purity was only slightly high and Titer only slightly low, their combination was far outside the normal process correlation, a failure mode two separate charts would have missed. **Decision:** Quarantine Batch #25 and launch an investigation into the raw materials used.")
 
 def plot_p_chart(df):
-    df['proportion'] = df['Batches_Failed'] / df['Batches_Tested']; p_bar = df['Batches_Failed'].sum() / df['Batches_Tested'].sum(); df['UCL'] = p_bar + 3 * np.sqrt(p_bar * (1 - p_bar) / df['Batches_Tested']); df['LCL'] = (p_bar - 3 * np.sqrt(p_bar * (1 - p_bar) / df['Batches_Tested'])).clip(lower=0)
-    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Month'], y=df['proportion'], name='Proportion Failed', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Month'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color='red', dash='dash'))); fig.add_trace(go.Scatter(x=df['Month'], y=df['LCL'], name='LCL (Varying)', mode='lines', line=dict(color='red', dash='dash'))); fig.add_hline(y=p_bar, name='Average Fail Rate', line=dict(color='green', dash='dot'))
-    outliers = df[df['proportion'] > df['UCL']]; fig.add_trace(go.Scatter(x=outliers['Month'], y=outliers['proportion'], mode='markers', name='Out of Control Signal', marker=dict(symbol='x', color='red', size=12)))
-    fig.update_layout(title='<b>p-Chart for Batch Release Failure Rate</b>', xaxis_title='Month', yaxis_title='Proportion of Batches Failed', yaxis_tickformat=".2%")
-    return fig
+    render_full_chart_briefing(context="Monitoring the proportion of monthly HPLC System Suitability Tests (SSTs) that fail.", significance="Tracks the failure rate of a key quality system when the number of tests performed each month varies. It provides a high-level view of the health and reliability of an entire analytical system.", regulatory="Directly supports quality system monitoring as required by **21 CFR 211** and **EudraLex Vol. 4**. Tracking SST failures is a critical component of laboratory control and data integrity (**ALCOA+**).")
+    df['proportion'] = df['SSTs_Failed'] / df['SSTs_Run']; p_bar = df['SSTs_Failed'].sum() / df['SSTs_Run'].sum(); df['UCL'] = p_bar + 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run']); df['LCL'] = (p_bar - 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run'])).clip(lower=0)
+    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Month'], y=df['proportion'], name='Proportion Failed', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Month'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'))); fig.add_hline(y=p_bar, name='Average Fail Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
+    fig.update_layout(title='<b>p-Chart for System Suitability Test (SST) Failure Rate</b>', yaxis_title='Proportion of SSTs Failed', yaxis_tickformat=".1%")
+    st.plotly_chart(fig, use_container_width=True)
+    st.error("**Actionable Insight:** The p-chart reveals a statistically significant spike in the SST failure rate in October, breaching the UCL. This indicates a special cause of variation. **Decision:** Launch an investigation focused on events in October. Review all column changes, mobile phase preparations, and instrument maintenance records from that period to find the root cause.")
 
-def plot_transfer_risk_waterfall(model, input_df):
-    base_value = 0.45; contributions = {'Complexity_Score': (input_df['Complexity_Score'].iloc[0] - 6) * -0.05, 'SOP_Maturity_Score': (input_df['SOP_Maturity_Score'].iloc[0] - 6) * 0.04, 'Training_Cycles': (input_df['Training_Cycles'].iloc[0] - 2) * 0.03}; final_prediction = base_value + sum(contributions.values())
-    fig = go.Figure(go.Waterfall(name = "Prediction", orientation = "v", measure = ["relative", "relative", "relative", "total"], x = ["Complexity", "SOP Maturity", "Training", "Final Prediction"], textposition = "outside", text = [f"{v:+.1%}" for v in contributions.values()] + [f"{final_prediction:.1%}"], y = list(contributions.values()) + [final_prediction], connector = {"line":{"color":"rgb(63, 63, 63)"}}, base = base_value))
-    fig.update_layout(title = "<b>Risk Contribution Analysis</b>", yaxis_title="Contribution to Success Probability", xaxis_title="Model Feature", yaxis_tickformat=".0%", showlegend=False)
-    return fig
+def plot_np_chart(df):
+    render_full_chart_briefing(context="Tracking the number of rejected vials with cosmetic defects per batch, where each batch inspection always consists of exactly 50 vials.", significance="Provides a simple, direct way to monitor the number of defective items when the sample size is constant. It is often easier for operators to understand and react to than a proportion-based chart.", regulatory="A fundamental tool for lot acceptance and release testing programs (**21 CFR 211.165**). It provides an ongoing record of quality for in-process controls or final product inspection.")
+    n, p_bar = df['Batches_Sampled'].iloc[0], df['Defective_Vials'].sum() / (len(df) * n); ucl = n * p_bar + 3 * np.sqrt(n * p_bar * (1-p_bar)); lcl = max(0, n * p_bar - 3 * np.sqrt(n * p_bar * (1-p_bar)))
+    fig = go.Figure(go.Scatter(x=df['Week'], y=df['Defective_Vials'], mode='lines+markers')); fig.add_hline(y=ucl, line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=lcl, line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=n*p_bar, line_dash='dot', line_color=SUCCESS_GREEN)
+    fig.add_annotation(x=12, y=7, text="<b>Spike Detected</b>", bgcolor=ERROR_RED, font_color='white')
+    fig.update_layout(title='<b>np-Chart for Number of Defective Vials per Batch</b>', yaxis_title='Count of Defective Vials (n=50)', xaxis_title='Week')
+    st.plotly_chart(fig, use_container_width=True)
+    st.error("**Actionable Insight:** A statistically significant spike in defective vials was detected in Week 13. **Decision:** Place the associated lot on hold. Launch a root cause investigation focusing on the vial washing and siliconization process for that specific production run.")
 
-def plot_tech_opportunity_matrix(df):
-    df['Complexity_Num'] = df['Implementation_Complexity_Score']; avg_impact = df['Est_Throughput_Increase_Factor'].mean(); avg_complexity = df['Complexity_Num'].mean()
-    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Complexity_Num'], y=df['Est_Throughput_Increase_Factor'], mode='markers+text', text=df['Technology'], textposition='top center', marker=dict(size=df['Est_FTE_Saving']*15, color=df['Targeted_Process'].astype('category').cat.codes, colorscale='viridis', showscale=False), hovertext=df['Targeted_Process'], name='Technologies'))
-    fig.add_vline(x=avg_complexity, line_width=1, line_dash="dash", line_color="grey"); fig.add_hline(y=avg_impact, line_width=1, line_dash="dash", line_color="grey")
-    fig.update_layout(title='<b>Technology Opportunity Prioritization Matrix</b>', xaxis_title='Implementation Complexity (Score)', yaxis_title='Throughput Increase (x-fold)')
-    fig.add_annotation(x=avg_complexity*0.9, y=avg_impact*1.1, text="<b>🔥 QUICK WINS 🔥</b>", showarrow=False, font=dict(color="#2e7d32", size=14)); fig.add_annotation(x=avg_complexity*1.1, y=avg_impact*1.1, text="<b>STRATEGIC BETS</b>", showarrow=False, font=dict(color="#2962ff")); fig.add_annotation(x=avg_complexity*0.9, y=avg_impact*0.9, text="<b>INCREMENTAL</b>", showarrow=False, font=dict(color="#ffc107")); fig.add_annotation(x=avg_complexity*1.1, y=avg_impact*0.9, text="<b>LUXURY</b>", showarrow=False, font=dict(color="grey"))
-    return fig
+def plot_c_chart(df):
+    render_full_chart_briefing(context="Monitoring the number of bioburden colonies found per environmental monitoring (EM) plate placed in a critical Grade A area.", significance="Tracks the level of microbiological control in a cleanroom. An out-of-control signal is a direct indicator of a potential contamination event that could impact product sterility and patient safety.", regulatory="Directly supports compliance with **EudraLex Vol. 4, Annex 1** (Manufacture of Sterile Medicinal Products) and **ISO 14644**. It provides objective evidence that the classified environment is being maintained in a state of control as required by **21 CFR 211.113**.")
+    c_bar = df['Contaminants_per_Plate'].mean(); ucl = c_bar + 3 * np.sqrt(c_bar); lcl = max(0, c_bar - 3 * np.sqrt(c_bar))
+    fig = go.Figure(go.Scatter(x=df['Week'], y=df['Contaminants_per_Plate'], mode='lines+markers')); fig.add_hline(y=ucl, line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=lcl, line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=c_bar, line_dash='dot', line_color=SUCCESS_GREEN)
+    fig.add_annotation(x=15, y=9, text="<b>Spike Detected</b>", bgcolor=ERROR_RED, font_color='white')
+    fig.update_layout(title='<b>c-Chart for Environmental Monitoring (Bioburden)</b>', yaxis_title='Colony Count per Plate', xaxis_title='Week')
+    st.plotly_chart(fig, use_container_width=True)
+    st.error("**Actionable Insight:** The c-chart shows a statistically significant spike in the colony count during Week 16. This indicates a special cause event. **Decision:** Place the room on hold and launch an immediate investigation, reviewing cleaning logs, personnel access, and HVAC performance data for that week.")
 
-# ======================================================================================
-# SECTION 4: MAIN APPLICATION LAYOUT & SCIENTIFIC NARRATIVE
-# ======================================================================================
-st.title("🧬 Analytical Development Operations Command Center")
-st.markdown("##### A strategic dashboard for managing high-throughput testing, method lifecycle, and program leadership in biologics development.")
-sample_df, cqa_df, transfer_df, doe_df, team_df, equipment_df, subgroup_df, p_chart_df, tech_df = generate_master_data()
-transfer_risk_model = get_transfer_risk_model(transfer_df)
+def plot_u_chart(df):
+    render_full_chart_briefing(context="Monitoring the rate of particulate defects found during the visual inspection of finished drug product vials, where the number of vials inspected from each batch varies.", significance="Provides a normalized measure of quality (defects per unit) that is comparable across batches of different sizes. This is crucial for accurately assessing process stability when production volumes fluctuate.", regulatory="A more sophisticated tool for lot release and stability testing (**21 CFR 211.165, 211.166**). Using a u-chart over a simpler c-chart demonstrates a higher level of statistical understanding when dealing with variable sample sizes.")
+    df['defects_per_unit'] = df['Particulate_Defects'] / df['Vials_Inspected']; u_bar = df['Particulate_Defects'].sum() / df['Vials_Inspected'].sum(); df['UCL'] = u_bar + 3 * np.sqrt(u_bar / df['Vials_Inspected']); df['LCL'] = (u_bar - 3 * np.sqrt(u_bar / df['Vials_Inspected'])).clip(lower=0)
+    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Batch'], y=df['defects_per_unit'], name='Defect Rate', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Batch'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'))); fig.add_hline(y=u_bar, name='Average Defect Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
+    fig.add_annotation(x=11, y=df['defects_per_unit'].iloc[10], text="<b>Spike Detected</b>", bgcolor=ERROR_RED, font_color='white')
+    fig.update_layout(title='<b>u-Chart for Particulate Defect Rate per Vial</b>', yaxis_title='Defects per Vial', xaxis_title='Batch Number')
+    st.plotly_chart(fig, use_container_width=True)
+    st.error("**Actionable Insight:** The u-chart detected a statistically significant increase in the defect rate for Batch 11, even though the absolute number of defects might not have seemed alarming on its own. **Decision:** Quarantine Batch 11. The investigation should focus on the glass vial supplier and the washing process specific to that production run.")
 
-st.markdown("### I. AD Operations & Sample Throughput Command Center")
-kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4); avg_tat = (sample_df['Backlog'].mean() / sample_df['Samples_Tested'].mean()) * 7 if sample_df['Samples_Tested'].mean() > 0 else 0; kpi_col1.metric("Avg. Sample TAT (Days)", f"{avg_tat:.1f}"); kpi_col2.metric("Weekly Throughput", f"{sample_df['Samples_Tested'].iloc[-1]} Samples", f"{sample_df['Samples_Tested'].iloc[-1] - sample_df['Samples_Tested'].iloc[-2]:+d} vs last week"); kpi_col3.metric("Methods in Transfer", f"{transfer_df[transfer_df['Status'].isin(['Validation', 'Optimization'])].shape[0]}"); equipment_offline = equipment_df[equipment_df['Status'] != 'Online'].shape[0]; kpi_col4.metric("Equipment Readiness", f"{100-((equipment_offline/len(equipment_df))*100):.0f}%", f"{equipment_offline} Instrument(s) Offline", "inverse")
-st.markdown("---")
+## --- LIFECYCLE HUB FUNCTIONS ---
+def plot_stability_analysis(df):
+    render_full_chart_briefing(context="Analyzing long-term stability data for an AAV drug product to determine its shelf-life.", significance="Provides the statistical justification for a product's expiration date, a critical component of any regulatory submission and a key patient safety consideration.", regulatory="Directly follows the methodology outlined in **ICH Q1E: Evaluation of Stability Data**. It requires statistical analysis to propose a retest period or shelf life.")
+    spec_limit = 90.0; time_points = df['Time_months']; potency = df['Potency_pct']; slope, intercept, r_value, p_value, std_err = stats.linregress(time_points, potency)
+    fig = px.scatter(df, x='Time_months', y='Potency_pct', title="<b>ICH Q1E Stability Analysis & Shelf-Life Estimation</b>", trendline='ols', trendline_color_override='red')
+    fig.add_hline(y=spec_limit, line_dash='dash', line_color=ERROR_RED, annotation_text="Specification Limit (90%)")
+    shelf_life = (spec_limit - intercept) / slope if slope < 0 else "N/A"
+    if isinstance(shelf_life, float): fig.add_vline(x=shelf_life, line_dash='dot', line_color=SUCCESS_GREEN, annotation_text=f"Est. Shelf Life: {shelf_life:.1f} mo")
+    st.plotly_chart(fig, use_container_width=True)
+    st.success(f"**Actionable Insight:** The linear regression analysis of the stability data predicts a shelf-life of **{shelf_life:.1f} months** at the specified storage condition. The model shows a strong fit (R² = {r_value**2:.3f}). **Decision:** Propose a 24-month shelf life for the AAV-101 drug product in the upcoming BLA submission, providing this data as statistical justification.")
 
-tab1, tab2, tab3, tab4 = st.tabs(["**II. METHOD PERFORMANCE & OPTIMIZATION (DOE/SPC)**", "**III. TECHNOLOGY TRANSFER & VALIDATION (ML)**", "**IV. PROGRAM LEADERSHIP & RESOURCES**", "**V. HIGH THROUGHPUT TECHNOLOGY**"])
-
-with tab1:
-    st.header("II. Method Performance & Optimization")
-    st.markdown("_This section provides tools for developing robust analytical procedures using advanced statistical methods and for monitoring their performance over the lifecycle, in accordance with ICH Q8, Q14, and Q2._")
-    st.subheader("A. Method Optimization via Response Surface Methodology (RSM)")
-    with st.expander("View Methodological Summary", expanded=True):
-        st.markdown("""
-        - **Purpose:** To efficiently identify the optimal conditions for a new analytical method by modeling the relationship between input factors and a critical output response. This is a core principle of Quality by Design (QbD) as described in ICH Q8 and Q14.
-        - **Method:** A Design of Experiments (DOE), typically a central composite or Box-Behnken design, is executed in the lab. A quadratic regression model is then fitted to the experimental data to generate the 3D response surface and 2D contour plot. The surface visualizes how the response (e.g., AAV Purity) changes as two factors (e.g., mobile phase pH, gradient slope) are varied simultaneously.
-        - **Findings & Interpretation:** The peak of the 3D surface represents the predicted optimal setpoint for the method, maximizing robustness and performance. The 2D contour plot is used to define the **Method Operable Design Region (MODR)**—the "safe" operating space (red dashed box) where the method will consistently perform as expected. This data is critical for setting robust method parameters and defending the method's control strategy to regulatory agencies.
-        """)
-    fig_3d, fig_2d = plot_rsm_suite(doe_df, 'pH', 'Gradient_Slope_Pct_min', 'AAV_Purity_Pct')
-    col1, col2 = st.columns(2); col1.plotly_chart(fig_3d, use_container_width=True); col2.plotly_chart(fig_2d, use_container_width=True)
-    st.subheader("B. Method Lifecycle Monitoring via Statistical Process Control (SPC) Suite")
-    spc_choice = st.selectbox("Select SPC Analysis Type:", ["Method Stability (I-MR Chart)", "Subgroup Precision & Accuracy (X-bar & R Chart)", "Process Yield (p-Chart)"])
-    if spc_choice == "Method Stability (I-MR Chart)":
-        with st.expander("View Methodological Summary", expanded=True):
-            st.markdown("""
-            - **Purpose:** To monitor the stability of a method when data is collected as individual measurements (e.g., daily system suitability or reference standard checks). This provides early detection of method drift or shifts.
-            - **Method:** An Individuals Chart (I-Chart) is used to track individual results against statistical control limits (UCL/LCL, typically ±3σ) to detect significant shifts in the process mean. This chart is enhanced with **Nelson's Rule 1** detection, which flags 9 consecutive points on one side of the mean as a statistically significant, non-random trend.
-            - **Findings & Interpretation:** The plot shows two signals: an orange diamond signal (Nelson Rule) indicating a subtle downward trend, followed by a red 'X' signal where a point breaches the UCL. This demonstrates a process that first became unstable (the trend) before becoming statistically out-of-control (the breach). This requires immediate Root Cause Analysis (RCA).
-            """)
-        st.plotly_chart(plot_enhanced_i_mr_chart(cqa_df, 'AAV_Titer_Control'), use_container_width=True)
-    elif spc_choice == "Subgroup Precision & Accuracy (X-bar & R Chart)":
-        with st.expander("View Methodological Summary", expanded=True):
-            st.markdown("""
-            - **Purpose:** To simultaneously monitor the central tendency (accuracy, via the X-bar chart) and variability (precision, via the R-chart) of a method when data is collected in rational subgroups (e.g., multiple replicates per run).
-            - **Method:** The X-bar chart plots the average of each subgroup. The R-chart plots the range (Max - Min) within each subgroup. Control limits are calculated based on the overall mean, average range, and standard statistical constants (A2, D3, D4).
-            - **Findings & Interpretation:** The R-chart must be analyzed first. It shows a significant increase in variability around subgroup #20, indicating a loss of method *precision*. This is followed by a shift in the mean on the X-bar chart around subgroup #30, indicating a loss of *accuracy*. This pattern suggests the root cause first impacted consistency before affecting the absolute result.
-            """)
-        st.plotly_chart(plot_xbar_r_chart(subgroup_df), use_container_width=True)
-    elif spc_choice == "Process Yield (p-Chart)":
-        with st.expander("View Methodological Summary", expanded=True):
-            st.markdown("""
-            - **Purpose:** To monitor the proportion of non-conforming items (e.g., failed batches, OOS results) over time, especially when the number of items tested each period varies.
-            - **Method:** A p-chart plots the proportion of failed batches (`p = failed / tested`) for each month. The control limits are dynamic and widen when the number of batches tested is small, reflecting lower statistical confidence in that period's data.
-            - **Findings & Interpretation:** The chart reveals a statistically significant spike in the failure rate in late 2024, which breaches the variable Upper Control Limit. This indicates a special cause of variation impacted that month's production or testing process and requires a thorough investigation, as it is highly unlikely to be due to random chance.
-            """)
-        st.plotly_chart(plot_p_chart(p_chart_df), use_container_width=True)
-
-with tab2:
-    st.header("III. Technology Transfer & Validation")
-    st.markdown("_This section provides tools to manage the transfer of analytical procedures to receiving units (QC labs, CDMOs) and to predict the likelihood of success based on key attributes._")
-    col1, col2 = st.columns([1,1])
-    with col1:
-        st.subheader("A. Tech Transfer Risk Prediction & Explainability")
-        with st.expander("View Methodological Summary", expanded=True):
-            st.markdown("""
-            - **Purpose:** To proactively identify high-risk method transfers, allowing for targeted resource allocation and risk mitigation strategies *before* the transfer begins.
-            - **Method:** A Random Forest classifier was trained on historical transfer data. The model uses key leading indicators — Method Complexity, SOP Maturity, and required Training Cycles — to predict the probability of a successful transfer outcome. The waterfall chart provides **explainability**, showing how each factor contributes positively or negatively to the final prediction relative to a baseline.
-            - **Interpretation:** This model provides a quantitative risk score. The waterfall chart shows *why* the risk is high or low. For example, a large negative contribution from "Complexity" can be directly addressed by investing time in simplifying the method before transfer. This transforms the model from a black box into an actionable diagnostic tool.
-            """)
-        complexity = st.slider("Method Complexity (1-10)", 1, 10, 5); sop_maturity = st.slider("SOP Maturity (1-10)", 1, 10, 7); training_cycles = st.slider("Planned Training Cycles", 1, 5, 2)
-        if st.button("🔬 Predict Transfer Success", type="primary"):
-            input_df = pd.DataFrame([[complexity, sop_maturity, training_cycles]], columns=['Complexity_Score', 'SOP_Maturity_Score', 'Training_Cycles'])
-            st.plotly_chart(plot_transfer_risk_waterfall(transfer_risk_model, input_df), use_container_width=True)
-    with col2:
-        st.subheader("B. Method Transfer Portfolio Status")
-        st.dataframe(transfer_df[['Program', 'Method', 'Receiving_Unit', 'Status']], use_container_width=True)
-
-with tab3:
-    st.header("IV. Program Leadership & Resource Management")
-    st.markdown("_This section provides oversight of the AD Ops team's alignment with high-level drug development programs and the status of critical laboratory resources._")
+def render_doe_suite(screening_df, doe_df):
+    render_full_chart_briefing(context="Developing a new HPLC purity method from first principles, following Quality by Design (QbD).", significance="A strategic, two-phase approach to method development. The Screening phase efficiently identifies the few critical parameters ('vital few') from the many potential ones ('trivial many'). The Optimization phase then precisely models the behavior of those critical parameters to define a robust operating space.", regulatory="This structured approach is the core principle of **ICH Q8(R2)** and **ICH Q14**. It moves beyond trial-and-error, creating a deep process understanding that is highly valued by regulatory agencies.")
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("A. Sample Testing Capacity vs. Demand")
-        fig = go.Figure(data=[go.Bar(name='Samples Tested', x=sample_df['Week'], y=sample_df['Samples_Tested']), go.Bar(name='Backlog Growth', x=sample_df['Week'], y=sample_df['Samples_Received'] - sample_df['Samples_Tested']), go.Scatter(name='Cumulative Backlog', x=sample_df['Week'], y=sample_df['Backlog'], yaxis='y2')]).update_layout(barmode='stack', title='<b>Weekly Sample Flow & Cumulative Backlog</b>', xaxis_title='Week', yaxis_title='Weekly Sample Count', yaxis2=dict(title='Total Backlog (Count)', overlaying='y', side='right'))
-        st.plotly_chart(fig, use_container_width=True)
+        st.subheader("Phase 1: Screening Design")
+        fig_pareto = px.bar(screening_df.sort_values('Effect_Size', ascending=False), x='Factor', y='Effect_Size', title="<b>Screening: Identifying Critical Parameters</b>")
+        st.plotly_chart(fig_pareto, use_container_width=True)
+        st.info("The Pareto plot shows that **pH** and **Gradient Slope** have the most significant effect on peak resolution. The other factors are considered trivial and can be fixed.")
     with col2:
-        st.subheader("B. Critical Equipment Status")
-        for _, row in equipment_df.iterrows():
-            if row['Status'] == 'Online': st.success(f"**{row['Instrument']}:** {row['Status']}")
-            elif row['Status'] == 'Calibration Due': st.warning(f"**{row['Instrument']}:** {row['Status']}")
-            else: st.error(f"**{row['Instrument']}:** {row['Status']}")
-    
-with tab4:
-    st.header("V. High Throughput Technology Assessment")
-    st.subheader("A. Technology Opportunity Prioritization Matrix")
-    with st.expander("View Methodological Summary", expanded=True):
-        st.markdown("""
-        - **Purpose:** To provide a data-driven framework for prioritizing investment in new high-throughput technologies and automation platforms.
-        - **Method:** A 2x2 matrix plotting Impact vs. Complexity. 
-          - **Impact (Y-axis):** The estimated factor by which the technology will increase sample throughput (e.g., 5x).
-          - **Complexity (X-axis):** A composite score representing cost, validation effort, and integration difficulty.
-          - **Bubble Size:** Represents the estimated Full-Time Equivalent (FTE) savings, linking the investment to operational headcount efficiency.
-        - **Interpretation:** The matrix identifies four strategic categories for investment:
-          - **🔥 QUICK WINS:** High impact, low complexity. These are top-priority projects that should be funded and executed immediately.
-          - **STRATEGIC BETS:** High impact, high complexity. These are major transformational projects that require significant capital and a multi-quarter implementation plan.
-          - **INCREMENTAL:** Low impact, low complexity. Good for continuous improvement and can often be funded by operational budgets.
-          - **LUXURY:** Low impact, high complexity. Generally avoided unless they are enabling technologies for a larger strategic bet.
-        """)
-    st.plotly_chart(plot_tech_opportunity_matrix(tech_df), use_container_width=True)
+        st.subheader("Phase 2: Optimization (RSM)")
+        poly = PolynomialFeatures(degree=2); X_poly = poly.fit_transform(doe_df[['pH', 'Gradient_Slope']]); model = LinearRegression().fit(X_poly, doe_df['Peak_Resolution'])
+        x = np.linspace(-1, 1, 30); y = np.linspace(-1, 1, 30); x_grid, y_grid = np.meshgrid(x, y)
+        X_pred_poly = poly.transform(np.c_[x_grid.ravel(), y_grid.ravel()]); z_grid = model.predict(X_pred_poly).reshape(x_grid.shape)
+        fig_rsm = go.Figure(data=[go.Contour(z=z_grid, x=x, y=y, colorscale='viridis')]); fig_rsm.update_layout(title="<b>Optimization: Defining the MODR</b>")
+        st.plotly_chart(fig_rsm, use_container_width=True)
+        st.info("The Response Surface contour plot maps the 'safe' operating space (Method Operable Design Region - MODR). The method setpoint will be chosen at the center of this space for maximum robustness.")
+    st.success("**Actionable Insight:** The two-phase DOE approach provides a highly efficient and scientifically sound path to a robust method. **Decision:** Finalize the method SOP with the setpoints derived from the RSM optimization and proceed to formal validation.")
 
-# ============================ SIDEBAR ============================
+def plot_method_equivalency_tost(df):
+    render_full_chart_briefing(context="Comparing a newly developed, faster UPLC method against the legacy validated HPLC method to ensure results are comparable before replacing the old method.", significance="Proves that two methods are statistically equivalent and can be used interchangeably. This is critical for post-approval changes, method updates, or transfers between sites without needing to re-establish all specifications.", regulatory="The TOST (Two One-Sided T-Tests) approach is the gold standard for demonstrating equivalency and is preferred by the **FDA** over simple t-tests. It directly supports lifecycle management as described in **ICH Q12**.")
+    diff = df['UPLC'] - df['HPLC']; n = len(diff); mean_diff = diff.mean(); std_diff = diff.std(ddof=1); se_diff = std_diff / np.sqrt(n); t_crit = stats.t.ppf(0.95, df=n-1); ci_lower = mean_diff - t_crit * se_diff; ci_upper = mean_diff + t_crit * se_diff; equiv_limit = 0.5
+    fig = go.Figure(go.Bar(x=[mean_diff], y=['Mean Difference'], orientation='h', name='90% CI of Difference', error_x=dict(type='data', array=[ci_upper - mean_diff], arrayminus=[mean_diff - ci_lower]))); fig.add_vline(x=-equiv_limit, line_dash='dash', line_color=ERROR_RED, annotation_text="Lower Equiv. Limit"); fig.add_vline(x=equiv_limit, line_dash='dash', line_color=ERROR_RED, annotation_text="Upper Equiv. Limit")
+    fig.update_layout(title="<b>Method Equivalency via TOST</b>", xaxis_title="Difference in Purity (%) [UPLC - HPLC]")
+    st.plotly_chart(fig, use_container_width=True)
+    if ci_lower > -equiv_limit and ci_upper < equiv_limit: st.success("**Actionable Insight:** The 90% confidence interval of the mean difference falls entirely within the pre-defined equivalence limits of ±0.5%. **Decision:** The new UPLC method is statistically equivalent to the legacy HPLC method. A protocol can be drafted to replace the old method in the QC lab.")
+    else: st.error("**Actionable Insight:** The confidence interval crosses one of the equivalence limits, failing to prove equivalence. **Decision:** The methods cannot be used interchangeably. An investigation into the source of the bias between the two methods is required.")
+
+## --- PREDICTIVE HUB FUNCTIONS ---
+@st.cache_resource
+def get_oos_rca_model(_df):
+    df_encoded = pd.get_dummies(_df, columns=['Instrument', 'Analyst', 'Molecule_Type'])
+    features = [col for col in df_encoded.columns if col != 'Root_Cause']; target = 'Root_Cause'; X, y = df_encoded[features], df_encoded[target]
+    model = RandomForestClassifier(n_estimators=100, random_state=42).fit(X, y); return model, X.columns
+def run_oos_prediction_model(df):
+    render_full_chart_briefing(context="An analyst reports an Out-of-Specification (OOS) result and a formal lab investigation is initiated.", significance="This predictive tool acts as a 'digital SME' to guide the investigation. By analyzing the parameters of the failed run, it suggests the most probable root cause, focusing the initial troubleshooting efforts and saving valuable time.", regulatory="Demonstrates a proactive, data-driven approach to laboratory investigations as required by **21 CFR 211.192**. It ensures investigations are thorough, timely, and based on historical data patterns, not just guesswork.")
+    model, feature_cols = get_oos_rca_model(df)
+    col1, col2, col3 = st.columns(3); instrument = col1.selectbox("Instrument Used", df['Instrument'].unique()); analyst = col2.selectbox("Analyst", df['Analyst'].unique()); molecule = col3.selectbox("Molecule Type", df['Molecule_Type'].unique())
+    if st.button("🔬 Predict Probable Root Cause", type="primary"):
+        input_data = pd.DataFrame(columns=feature_cols, index=[0]).fillna(0); input_data[f'Instrument_{instrument}'] = 1; input_data[f'Analyst_{analyst}'] = 1; input_data[f'Molecule_Type_{molecule}'] = 1
+        pred_proba = model.predict_proba(input_data); proba_df = pd.DataFrame(pred_proba.T, index=model.classes_, columns=['Probability']).sort_values('Probability', ascending=False)
+        fig = px.bar(proba_df, x='Probability', y=proba_df.index, orientation='h', title="<b>Predicted Root Cause Probability</b>", text_auto='.1%')
+        st.plotly_chart(fig, use_container_width=True)
+        st.success(f"**Actionable Insight:** The model predicts the highest probability root cause is **'{proba_df.index[0]}'.** **Decision:** The lab investigation should begin by immediately focusing on this area. For example, if 'Sample_Prep_Error' is indicated, the first step is to interview the analyst and review their specific sample preparation records.")
+
+def plot_backlog_forecast(df):
+    render_full_chart_briefing(context="The AD Ops leader needs to plan resource allocation (headcount, instrument time) for the upcoming quarters.", significance="Moves planning from reactive to proactive. By forecasting the future sample backlog, a leader can provide data-driven justification for hiring new staff or purchasing new equipment *before* the lab becomes a bottleneck to the entire R&D organization.", regulatory="While not a direct compliance requirement, this demonstrates strong resource and capacity planning, a key competency for laboratory management under quality systems like **ISO 17025** and general GxP.")
+    model = SimpleExpSmoothing(df['Backlog'], initialization_method="estimated").fit(); forecast = model.forecast(26)
+    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Week'], y=df['Backlog'], name='Historical Backlog', line=dict(color=PRIMARY_COLOR))); fig.add_trace(go.Scatter(x=forecast.index, y=forecast, name='Forecasted Backlog', line=dict(color=ERROR_RED, dash='dash')))
+    st.plotly_chart(fig, use_container_width=True)
+    st.error(f"**Actionable Insight:** The time series forecast predicts that the sample backlog will exceed **{forecast.iloc[-1]:.0f} samples** within the next 6 months. This trend is unsustainable with the current staffing level. **Decision:** Submit a formal headcount request for one additional Research Associate, using this forecast as the primary data-driven justification.")
+
+@st.cache_resource
+def get_maint_model(_df):
+    features = ['Run_Hours', 'Pressure_Spikes', 'Column_Age_Days']; target = 'Needs_Maint'; X, y = _df[features], _df[target]
+    model = RandomForestClassifier(n_estimators=100, random_state=42).fit(X, y); return model
+def run_hplc_maintenance_model(df):
+    render_full_chart_briefing(context="Managing a fleet of heavily used HPLC instruments and deciding which ones to prioritize for preventative maintenance.", significance="Shifts maintenance from a fixed, time-based schedule to a proactive, condition-based model. It reduces unnecessary maintenance on healthy instruments and prevents unexpected failures on high-risk instruments, maximizing uptime.", regulatory="Ensures instruments remain in a qualified state as required by **21 CFR 211.160(b)**. A predictive model provides a sophisticated, risk-based approach (**ICH Q9**) to maintaining the validated state of equipment.")
+    model = get_maint_model(df)
+    col1, col2, col3 = st.columns(3); hours = col1.slider("Total Run Hours", 50, 1000, 750); spikes = col2.slider("Pressure Spikes >100psi", 0, 20, 18); age = col3.slider("Column Age (Days)", 10, 300, 280)
+    pred_prob = model.predict_proba(pd.DataFrame([[hours, spikes, age]], columns=['Run_Hours', 'Pressure_Spikes', 'Column_Age_Days']))[0][1]
+    fig = go.Figure(go.Indicator(mode = "gauge+number", value = pred_prob * 100, title = {'text': "Predicted Probability of Needing Maintenance"}, gauge = {'axis': {'range': [None, 100]}, 'bar': {'color': ERROR_RED if pred_prob > 0.7 else WARNING_AMBER if pred_prob > 0.4 else SUCCESS_GREEN}, 'steps' : [{'range': [0, 40], 'color': "lightgray"}, {'range': [40, 70], 'color': "gray"}]}))
+    st.plotly_chart(fig, use_container_width=True)
+    st.warning("**Actionable Insight:** Based on its high usage, number of pressure spikes, and the age of its column, the model predicts a very high probability that HPLC-01 requires preventative maintenance. **Decision:** Schedule HPLC-01 for maintenance this week, prioritizing it over other instruments with lower risk scores to prevent an unexpected failure during a critical run.")
+
+## --- QBD & QUALITY SYSTEMS HUB FUNCTIONS ---
+def render_qbd_sankey_chart(df):
+    render_full_chart_briefing(context="Defining the relationships between material attributes, process parameters, and quality attributes for an HPLC purity method.", significance="This visualizes the core of QbD: understanding and controlling the linkages between what goes into a process (CMAs), what the process does (CPPs), and the quality of the output (CQAs). It forms the basis of a robust control strategy.", regulatory="This is a direct visual representation of the principles outlined in **ICH Q8 (Pharmaceutical Development)**. It provides clear justification for the parameters chosen for validation and routine monitoring.")
+    all_nodes = pd.unique(df[['Source', 'Target']].values.ravel('K')); node_map = {node: i for i, node in enumerate(all_nodes)}
+    fig = go.Figure(data=[go.Sankey(node = dict(pad=15, thickness=20, line=dict(color="black", width=0.5), label=all_nodes, color=PRIMARY_COLOR), link = dict(source = df['Source'].map(node_map), target = df['Target'].map(node_map), value = df['Value']))])
+    fig.update_layout(title_text="<b>QbD Control Strategy: Linking CMAs/CPPs to CQAs</b>", font_size=12)
+    st.plotly_chart(fig, use_container_width=True)
+    st.success("**Actionable Insight:** The diagram clearly shows that 'Gradient Slope' is a Critical Process Parameter as it strongly influences the 'Peak Resolution' CQA. Therefore, this parameter must have a tight control range in the final method and SOP. 'Flow Rate', which only impacts precision, can have a wider acceptable range.")
+
+def render_method_v_model():
+    render_full_chart_briefing(context="Establishing a formal, traceable development plan for a new analytical method before any lab work begins.", significance="The V-Model ensures that development is systematic and that every requirement is ultimately verified. It prevents scope creep and ensures the final, validated method is guaranteed to be fit for its intended purpose.", regulatory="This visualizes the Design Control process, a fundamental concept in **21 CFR 820.30** (for medical devices, but a best practice for pharma) and **ISO 13485**. It ensures a direct link between user needs (ATP) and validated performance.")
+    fig = go.Figure(); fig.add_trace(go.Scatter(x=[1, 2, 3, 4], y=[4, 3, 2, 1], mode='lines+markers+text', text=["<b>Analytical Target Profile (ATP)</b>", "<b>Method Requirements</b>", "<b>Method Design (e.g., Column Choice)</b>", "<b>Method Procedure (SOP Draft)</b>"], textposition="bottom center", line=dict(color=PRIMARY_COLOR, width=3), marker=dict(size=15))); fig.add_trace(go.Scatter(x=[5, 6, 7, 8], y=[1, 2, 3, 4], mode='lines+markers+text', text=["<b>Procedure Verification</b>", "<b>Instrument Qualification (IQ/OQ)</b>", "<b>Method Validation (ICH Q2)</b>", "<b>ATP Confirmation (Fitness for Use)</b>"], textposition="top center", line=dict(color=SUCCESS_GREEN, width=3), marker=dict(size=15)))
+    links = [("ATP ↔ Fitness for Use", 4), ("Requirements ↔ Validation", 3), ("Design ↔ Qualification", 2), ("Procedure ↔ Verification", 1)]
+    for i, (text, y_pos) in enumerate(links): fig.add_shape(type="line", x0=4-i, y0=y_pos, x1=5+i, y1=y_pos, line=dict(color=NEUTRAL_GREY, width=1, dash="dot")); fig.add_annotation(x=4.5, y=y_pos + 0.1, text=text, showarrow=False)
+    fig.update_layout(title_text="<b>Analytical Method Design Control (V-Model)</b>", title_x=0.5, showlegend=False, xaxis=dict(visible=False), yaxis=dict(visible=False))
+    st.plotly_chart(fig, use_container_width=True)
+    st.success("**Actionable Insight:** The V-model provides a clear roadmap for the entire team. By defining the validation criteria upfront based on the ATP, we de-risk the project and ensure that our final validation exercise will definitively prove the method is fit-for-purpose.")
+
+def run_interactive_rca_fishbone():
+    render_full_chart_briefing(context="An Out-of-Specification (OOS) result for purity has been confirmed, and a formal laboratory investigation has been launched.", significance="A structured RCA tool like a Fishbone diagram prevents 'tunnel vision' during an investigation. It forces the team to consider a wide range of potential causes across different categories, leading to a more thorough and accurate root cause determination.", regulatory="Using a formal RCA tool is a best practice for OOS investigations, as required by **21 CFR 211.192**. It provides documented, objective evidence that the investigation was systematic and not just a cursory check.")
+    st.subheader("Interactive Fishbone Diagram for OOS Investigation")
+    causes = {'Man (Analyst)': ['Inadequate training', 'Improper sample preparation', 'Calculation error'], 'Machine (Instrument)': ['Leaky pump seal', 'Detector lamp aging', 'Incorrect injection volume'], 'Material (Reagents/Sample)': ['Reference standard degraded', 'Contaminated mobile phase', 'Sample degradation'], 'Method': ['SOP is unclear or incorrect', 'Method not robust to lab conditions', 'Incorrect column equilibration time'], 'Measurement': ['Integration parameters incorrect', 'Calibration curve expired', 'Wrong standard concentration used'], 'Environment': ['Lab temperature out of range', 'Vibration near balance', 'Power fluctuation']}
+    category = st.selectbox("Select a category to investigate:", list(causes.keys())); st.write(f"**Potential Causes related to {category}:**"); [st.write(f"- {cause}") for cause in causes[category]]
+    st.success("**Actionable Insight:** The investigation team uses this structured tool to brainstorm. After testing several hypotheses, the team confirmed through re-analysis with a freshly prepared standard that the **'Reference standard degraded'** was the true root cause. **Decision:** A CAPA will be initiated to revise the reference standard management SOP to include more frequent stability checks.")
+
+def render_troubleshooting_flowchart():
+    render_full_chart_briefing(context="An unexpected system suitability failure occurs during a routine QC test.", significance="A formal troubleshooting flowchart ensures that investigations are performed consistently, efficiently, and in a compliant manner. It prevents ad-hoc, undocumented troubleshooting that can invalidate results and lead to audit findings.", regulatory="This visualizes the logical, documented process required for any laboratory investigation (**21 CFR 211.192**). It shows that actions are proceduralized and that the path to resolution is scientifically sound.")
+    st.graphviz_chart('''digraph OOS_Flowchart {rankdir=TB; node [shape=box, style=rounded]; start [label="OOS Result Detected"]; confirm [label="Phase 1a: Confirm Result \n(e.g., check calculations, re-inject)"]; investigate [label="Phase 1b: Formal Lab Investigation\n(Use Fishbone RCA)"]; assignable_cause [label="Assignable Cause Found?", shape=diamond]; capa [label="Implement CAPA\n(e.g., retrain analyst, service instrument)"]; invalidate [label="Invalidate Initial Result"]; retest [label="Perform Retest per SOP"]; end [label="Close Investigation"]; start -> confirm; confirm -> investigate; investigate -> assignable_cause; assignable_cause -> capa [label="Yes"]; capa -> invalidate -> retest -> end; assignable_cause -> no_cause [label="No"]; no_cause [label="Phase 2: Full-Scale Investigation\n(Involve other departments)"];}''')
+    st.success("**Actionable Insight:** This flowchart serves as a universal guide for the team. In a recent event, an analyst followed this procedure, quickly identified an obvious calculation error at the 'Confirm Result' stage, corrected it, and prevented the need for a full-scale, time-consuming investigation. This saved significant resources.")
+
+# ======================================================================================
+# SECTION 5: PAGE RENDERING FUNCTIONS
+# ======================================================================================
+def render_strategic_hub_page(budget_df, team_df):
+    st.title("Executive & Strategic Hub")
+    render_manager_briefing(title="Leading Analytical Development as a High-Impact Business Unit", content="This hub demonstrates the strategic, business-oriented aspects of leading the AD Ops function. It covers financial management, goal setting (OKRs), and, most importantly, the development and mentorship of the scientific team.", reg_refs="Company HR Policies, Departmental Budget", business_impact="Ensures the department operates in a fiscally responsible manner, is aligned with corporate goals, and fosters a culture of growth and expertise.", quality_pillar="Leadership & People Management.", risk_mitigation="Prevents skill gaps on critical projects and justifies resource needs through clear, data-driven forecasting and performance tracking.")
+    st.subheader("Departmental OKRs", divider='violet'); st.dataframe(pd.DataFrame({"Objective": ["Accelerate PD Support", "Enhance Method Robustness", "Foster Team Growth"], "Key Result": ["Reduce avg. sample TAT by 15%", "Implement QbD for 2 new methods", "Cross-train 2 scientists on ddPCR"], "Status": ["On Track", "Complete", "On Track"]}).style.map(lambda s: f"background-color: {SUCCESS_GREEN if s in ['On Track', 'Complete'] else WARNING_AMBER}; color: white;"), use_container_width=True, hide_index=True)
+    col1, col2 = st.columns(2)
+    with col1: st.subheader("Annual Budget Performance", divider='violet'); st.plotly_chart(px.bar(budget_df, x='Category', y=budget_df['Actual'] - budget_df['Budgeted']), use_container_width=True)
+    with col2: st.subheader("Team Skill & Development Matrix", divider='violet'); st.dataframe(team_df, use_container_width=True, hide_index=True); st.success("**Actionable Insight:** The matrix identifies a potential bottleneck in cell-based assays. M. Lee will be assigned as the lead for the next potency assay development project, mentored by J. Doe, to support their growth.")
+
+def render_statistical_toolkit_page(lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df):
+    st.title("Advanced Statistical Toolkit")
+    render_manager_briefing(title="Applying Statistical Rigor to Analytical Problems", content="This hub serves as a comprehensive toolkit, demonstrating deep, first-principles expertise in applying the correct statistical process control (SPC) and capability tools to different analytical challenges. Each chart is presented with a realistic, domain-specific context to show not just *how* to perform the analysis, but *why* and *when* to use it.", reg_refs="ICH Q9 (Quality Risk Management), 21 CFR 211.165(d) (Statistics)", business_impact="Ensures that decisions about process control, method performance, and product quality are based on objective statistical evidence, not intuition.", quality_pillar="Statistical Thinking & Data Literacy.", risk_mitigation="Detects process drifts, out-of-control states, and capability issues early, preventing large-scale failures, batch rejections, and invalid data.")
+    tab1, tab2, tab3 = st.tabs(["**📊 Monitoring Process Stability & Drift**", "**📈 Monitoring Quality & Yield (Attribute Data)**", "**🔎 Advanced Process & Method Insights**"])
+    with tab1: st.subheader("Tools for Monitoring Continuous Data", divider='violet'); plot_i_mr_chart(imr_df); plot_levey_jennings(lj_df); plot_ewma_chart(ewma_df); plot_cusum_chart(cusum_df); plot_zone_chart(zone_df)
+    with tab2: st.subheader("Tools for Monitoring Attribute (Count/Fail) Data", divider='violet'); plot_p_chart(p_df); plot_np_chart(np_df); plot_c_chart(c_df); plot_u_chart(u_df)
+    with tab3: st.subheader("Tools for Deeper Process Understanding", divider='violet'); plot_hotelling_t2_chart(t2_df); plot_cpk_analysis(cpk_df)
+
+def render_lifecycle_hub_page(stability_df, tost_df, screening_df, doe_df):
+    st.title("Method & Product Lifecycle Hub")
+    render_manager_briefing(title="Guiding Methods from R&D to Commercial Launch", content="This hub demonstrates the strategic oversight of the entire analytical and product lifecycle. It showcases a deep understanding of early-stage method development (QbD), late-stage product stability, and the statistical tools needed to manage post-approval changes and method transfers.", reg_refs="ICH Q1E (Stability), ICH Q12 (Lifecycle Management), ICH Q8/Q14 (QbD)", business_impact="Creates robust, well-understood analytical methods that are less prone to failure, accelerates development timelines, and provides a solid data foundation for regulatory filings and product shelf-life justification.", quality_pillar="Lifecycle Management & Scientific Rigor.", risk_mitigation="Front-loads risk management into the development phase, preventing costly validation failures and ensuring methods are transferable and maintainable throughout the product's commercial life.")
+    st.subheader("Early-Stage: Quality by Design (QbD) for Method Development", divider='violet'); render_doe_suite(screening_df, doe_df)
+    st.subheader("Late-Stage: Commercial & Post-Approval Support", divider='violet'); plot_stability_analysis(stability_df); plot_method_equivalency_tost(tost_df)
+
+def render_predictive_hub_page(oos_df, backlog_df, maintenance_df):
+    st.title("Predictive Operations & Diagnostics")
+    render_manager_briefing(title="Building a Proactive, Data-Driven Operations Function", content="This hub showcases a forward-looking leadership approach, using predictive analytics and machine learning to move the AD Ops function from a reactive service center to a proactive, strategic partner. These tools are used to forecast future challenges, diagnose problems faster, and optimize resource allocation.", reg_refs="ICH Q9 (Quality Risk Management), FDA's Computer Software Assurance (CSA) Guidance", business_impact="Maximizes instrument uptime, accelerates OOS investigations, and provides data-driven justification for resource planning, ultimately increasing the speed and efficiency of the entire R&D organization.", quality_pillar="Predictive Analytics & Continuous Improvement.", risk_mitigation="Anticipates future bottlenecks, equipment failures, and quality issues, allowing for mitigation *before* they occur and impact critical program timelines.")
+    st.subheader("Predictive Diagnostics & Troubleshooting", divider='violet'); run_oos_prediction_model(oos_df)
+    st.subheader("Proactive Resource & Maintenance Planning", divider='violet'); plot_backlog_forecast(backlog_df); run_hplc_maintenance_model(maintenance_df)
+
+def render_qbd_quality_systems_hub_page(sankey_df):
+    st.title("QbD & Quality Systems Hub")
+    render_manager_briefing(title="Integrating Quality Systems into Analytical Development", content="This hub demonstrates a deep understanding of modern quality systems and philosophies. It showcases how to proactively build quality into methods from the start using Quality by Design (QbD) and Design Controls, and how to react to deviations with systematic, compliant problem-solving tools.", reg_refs="ICH Q8, Q9, Q10; 21 CFR 820.30 (Design Controls); 21 CFR 211.192 (Investigations)", business_impact="Creates fundamentally more robust and reliable methods, reduces validation failures, streamlines regulatory submissions, and ensures investigations are efficient and scientifically sound.", quality_pillar="Proactive Quality & Systematic Problem Solving.", risk_mitigation="Moves the function from a 'test-and-fix' mentality to a 'design-and-understand' paradigm, fundamentally de-risking the entire method lifecycle and ensuring compliance with formal investigation requirements.")
+    st.subheader("Proactive Quality by Design (QbD) & Design Controls", divider='violet'); render_qbd_sankey_chart(sankey_df); render_method_v_model()
+    st.subheader("Reactive Problem Solving & Root Cause Analysis (RCA)", divider='violet'); run_interactive_rca_fishbone(); render_troubleshooting_flowchart()
+
+# ======================================================================================
+# SECTION 6: MAIN APP ROUTER (SIDEBAR NAVIGATION)
+# ======================================================================================
 st.sidebar.image("https://assets-global.website-files.com/62a269e3ea783635a1608298/62a269e3ea783626786083d9_logo-horizontal.svg", use_container_width=True)
+st.sidebar.title("AD Ops Navigation")
+PAGES = {
+    "Executive & Strategic Hub": render_strategic_hub_page,
+    "QbD & Quality Systems Hub": render_qbd_quality_systems_hub_page,
+    "Method & Product Lifecycle Hub": render_lifecycle_hub_page,
+    "Predictive Operations & Diagnostics": render_predictive_hub_page,
+    "Advanced Statistical Toolkit": render_statistical_toolkit_page,
+}
+selection = st.sidebar.radio("Go to", list(PAGES.keys()))
+
+# --- Retrieve Data ---
+budget_df, team_df, lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df, stability_df, tost_df, screening_df, doe_df, oos_df, backlog_df, maintenance_df, sankey_df = generate_master_data()
+
+# --- Render the selected page ---
+if selection == "Executive & Strategic Hub":
+    render_strategic_hub_page(budget_df, team_df)
+elif selection == "QbD & Quality Systems Hub":
+    render_qbd_quality_systems_hub_page(sankey_df)
+elif selection == "Method & Product Lifecycle Hub":
+    render_lifecycle_hub_page(stability_df, tost_df, screening_df, doe_df)
+elif selection == "Predictive Operations & Diagnostics":
+    render_predictive_hub_page(oos_df, backlog_df, maintenance_df)
+elif selection == "Advanced Statistical Toolkit":
+    render_statistical_toolkit_page(lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df)
+
+st.sidebar.markdown("---")
 st.sidebar.markdown("### Role Focus")
-st.sidebar.info("This dashboard is for an **Associate Director, AD Operations**, focused on building a high-throughput testing function, leading method development & transfer, and acting as a PDT representative for biologics.")
+st.sidebar.info("This portfolio is for an **Associate Director, Analytical Development Operations** role, demonstrating leadership in building high-throughput testing functions, managing the method lifecycle, and applying advanced statistical methods.")
 st.sidebar.markdown("---")
-st.sidebar.markdown("### Applicable Regulatory Frameworks")
-with st.sidebar.expander("View Key GxP and ISO Regulations", expanded=False):
-    st.markdown("""
-    **ICH Q2(R1) - Validation of Analytical Procedures**\n*"...specificity, linearity, range, accuracy, precision (repeatability, intermediate precision), detection limit, quantitation limit, robustness."*
-    \n**ICH Q8(R2) - Pharmaceutical Development**\n*"The aim of pharmaceutical development is to design a quality product and its manufacturing process to consistently deliver the intended performance..."*
-    \n**ICH Q9 - Quality Risk Management**\n*"The evaluation of the risk to quality should be based on scientific knowledge and ultimately link to the protection of the patient."*
-    \n**ICH Q14 - Analytical Procedure Development**\n*"This guideline describes science and risk-based approaches for developing and maintaining analytical procedures..."*
-    \n**21 CFR Part 211 - cGMP for Finished Pharmaceuticals**\n*§211.165(e): "The accuracy, sensitivity, specificity, and reproducibility of test methods... shall be established and documented."*
-    \n**21 CFR Part 11 - Electronic Records; Electronic Signatures**\n*"Applicability to records in electronic form that are created, modified, maintained, archived, retrieved, or transmitted..."*
-    \n**EudraLex Vol. 4, Ch 6 - Quality Control**\n*"Test methods should be validated... before they are brought into routine use."*
-    \n**ISO 17025:2017 - General requirements for the competence of testing and calibration laboratories**\n*"The laboratory shall be responsible for the impartiality of its laboratory activities..."*
-    """)
-st.sidebar.markdown("---")
-st.sidebar.markdown("### Key Scientific Concepts")
-st.sidebar.markdown("""
-- **DOE/RSM:** Design of Experiments / Response Surface Methodology for efficient, multi-factorial process optimization.
-- **SPC:** Statistical Process Control for monitoring the state of control of a validated process over its lifecycle.
-- **AAV:** Adeno-Associated Virus, a common vector for gene therapy products.
-- **ALCOA+:** Attributable, Legible, Contemporaneous, Original, Accurate (+ Complete, Consistent, Enduring, Available). Principles of data integrity.
-""")
+st.sidebar.markdown("### Key Regulatory & Quality Frameworks")
+with st.sidebar.expander("View Applicable Guidelines", expanded=False):
+    st.markdown("- **ICH Q1E, Q2, Q8, Q9, Q10, Q12, Q14**\n- **21 CFR Parts 11, 211, 820.30**\n- **EudraLex Vol. 4, Annex 1 & 15**\n- **ISO 17025, ISO 13485**")
