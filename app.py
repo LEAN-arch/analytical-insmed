@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v13.3 - Final, Numerically Stable & Complete Version
+# v13.4 - Final, Fully Corrected & Role-Specific Version
 # ======================================================================================
 
 import streamlit as st
@@ -110,7 +110,6 @@ def generate_master_data():
         'Key Upcoming Milestone': ['Phase 1 Potency Matrix Validation', 'Candidate Selection Assay Panel', 'Initial Titer Method Dev.'],
         'Status': ['On Track', 'Minor Delays', 'At Risk']
     })
-    # SME UPDATE: Adding financial data for a full business case
     tech_roadmap_data = pd.DataFrame([
         {'Quarter': 'Q2', 'Initiative': 'Automated Liquid Handler', 'Impact': 'Reduce sample prep time by 75%', 'Projected FTE Savings (hrs/wk)': 20, 'Est. Capital Cost ($K)': 150, 'Projected ROI (Months)': 18, 'Status': '✅ Deployed'},
         {'Quarter': 'Q3', 'Initiative': 'LIMS Integration', 'Impact': 'Eliminate manual data transcription errors', 'Projected FTE Savings (hrs/wk)': 10, 'Est. Capital Cost ($K)': 75, 'Projected ROI (Months)': 24, 'Status': 'In Progress'},
@@ -141,6 +140,11 @@ def generate_master_data():
             'Key Performance Characteristic': ['TBD', 'TBD', 'TBD']
         })
     }
+    risk_register_data = pd.DataFrame([
+        {'Program': 'AAV-101', 'Partner Team': 'Downstream', 'Dependency': 'Purity method for new column resin', 'Risk Level': 'High', 'Mitigation Plan': 'Bridge study initiated, completion EOW.'},
+        {'Program': 'mAb-202', 'Partner Team': 'Formulation', 'Dependency': 'Sub-visible particle method for high-concentration formula', 'Risk Level': 'Medium', 'Mitigation Plan': 'Evaluating two orthogonal techniques in parallel.'},
+        {'Program': 'AAV-101', 'Partner Team': 'Upstream', 'Dependency': 'Rapid in-process titer result', 'Risk Level': 'Low', 'Mitigation Plan': 'Existing ddPCR method is sufficient.'}
+    ])
     
     # --- Data for LIFECYCLE HUB ---
     transfer_data = pd.DataFrame([
@@ -151,22 +155,6 @@ def generate_master_data():
         {'Program': 'mAb-202', 'Method': 'Charge Variant Assay', 'Task': 'Draft Transfer Protocol', 'Status': 'At Risk'},
         {'Program': 'mAb-202', 'Method': 'Charge Variant Assay', 'Task': 'Train QC Analysts', 'Status': 'Not Started'},
     ])
-    # --- Data for Lab of the Future Automation Matrix ---
-    automation_candidates = pd.DataFrame({
-        'Assay': ['ELISA (mAb-202)', 'ddPCR Plate Prep', 'CE-SDS Sample Prep', 'HPLC Mobile Phase Prep'],
-        'Manual Throughput (Samples/FTE/Wk)': [40, 80, 60, 200],
-        'Est. Automation Throughput': [400, 400, 180, 200],
-        'Error Rate (Manual)': [0.08, 0.05, 0.03, 0.01],
-        'Est. Error Rate (Auto)': [0.01, 0.01, 0.01, 0.01],
-        'Automation Priority Score': [9.5, 8.0, 6.5, 2.0]
-    })
-        # --- Data for Cross-Functional Risk Register ---
-    risk_register_data = pd.DataFrame([
-        {'Program': 'AAV-101', 'Partner Team': 'Downstream', 'Dependency': 'Purity method for new column resin', 'Risk Level': 'High', 'Mitigation Plan': 'Bridge study initiated, completion EOW.'},
-        {'Program': 'mAb-202', 'Partner Team': 'Formulation', 'Dependency': 'Sub-visible particle method for high-concentration formula', 'Risk Level': 'Medium', 'Mitigation Plan': 'Evaluating two orthogonal techniques in parallel.'},
-        {'Program': 'AAV-101', 'Partner Team': 'Upstream', 'Dependency': 'Rapid in-process titer result', 'Risk Level': 'Low', 'Mitigation Plan': 'Existing ddPCR method is sufficient.'}
-    ])
-        # --- Data for Method Validation Dashboard ---
     validation_data = pd.DataFrame({
         'Method': ['AAV Titer (ddPCR)', 'AAV Titer (ddPCR)', 'AAV Titer (ddPCR)', 'mAb Purity (HPLC)', 'mAb Purity (HPLC)', 'mAb Purity (HPLC)'],
         'Parameter': ['Accuracy', 'Precision (Inter)', 'Linearity (R²)', 'Accuracy', 'Precision (Inter)', 'Linearity (R²)'],
@@ -182,19 +170,9 @@ def generate_master_data():
     zone_data = np.random.normal(20, 0.5, 25); zone_data[15:] -= 0.4; zone_df = pd.DataFrame({'Seal_Strength': zone_data, 'Operator': np.random.choice(['Op-A', 'Op-B'], 25)})
     imr_data = np.random.normal(99.5, 0.1, 100); imr_data[60:68] -= 0.2; imr_data[80:] -= 0.25; imr_df = pd.DataFrame({'Purity': imr_data, 'Date': pd.to_datetime(pd.date_range(start='2023-01-01', periods=100, freq='D'))})
     cpk_data = np.random.normal(50.5, 0.25, 150); cpk_df = pd.DataFrame({'Titer': cpk_data})
-    
-    # SME FIX: The extreme difference in magnitude between variables caused numerical instability.
-    # The Titer data is scaled to a more realistic and numerically stable range.
-    mean_vec = [95, 10.0]
-    std_devs = [1.5, 1.5] 
-    correlation = 0.7
-    cov_mat = [[std_devs[0]**2, correlation * std_devs[0] * std_devs[1]],
-               [correlation * std_devs[0] * std_devs[1], std_devs[1]**2]]
+    mean_vec = [95, 10.0]; std_devs = [1.5, 1.5]; correlation = 0.7; cov_mat = [[std_devs[0]**2, correlation * std_devs[0] * std_devs[1]], [correlation * std_devs[0] * std_devs[1], std_devs[1]**2]]
     t2_data_in = np.random.multivariate_normal(mean_vec, np.array(cov_mat), 30)
-    t2_outlier = [97.5, 7.5]; # Outlier adjusted to new scale
-    t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]])
-    t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer (e12 vg/mL)']) # Column name updated for clarity
-    
+    t2_outlier = [97.5, 7.5]; t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]]); t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer (e12 vg/mL)'])
     p_data = {'Month': pd.to_datetime(pd.date_range(start='2023-01-01', periods=12, freq='ME')), 'SSTs_Run': np.random.randint(40, 60, 12)}; p_df = pd.DataFrame(p_data); p_df['SSTs_Failed'] = np.random.binomial(n=p_df['SSTs_Run'], p=0.05); p_df.loc[9, 'SSTs_Failed'] = 8
     np_df = pd.DataFrame({'Week': range(1, 21), 'Batches_Sampled': 50, 'Defective_Vials': np.random.binomial(n=50, p=0.04, size=20)}); np_df.loc[12, 'Defective_Vials'] = 7
     c_df = pd.DataFrame({'Week': range(1, 21), 'Contaminants_per_Plate': np.random.poisson(lam=3, size=20)}); c_df.loc[15, 'Contaminants_per_Plate'] = 9
@@ -213,12 +191,20 @@ def generate_master_data():
     backlog_df = pd.DataFrame({'Week': pd.to_datetime(pd.date_range(start='2022-01-01', periods=104, freq='W')), 'Backlog': backlog_vals.clip(min=0)})
     maintenance_df = pd.DataFrame({'Run_Hours': np.random.randint(50, 1000, 100), 'Pressure_Spikes': np.random.randint(0, 20, 100), 'Column_Age_Days': np.random.randint(10, 300, 100)}); maintenance_df['Needs_Maint'] = (maintenance_df['Run_Hours'] > 600) | (maintenance_df['Pressure_Spikes'] > 15) | (maintenance_df['Column_Age_Days'] > 250)
     sankey_df = pd.DataFrame({'Source': ['Column Lot', 'Mobile Phase Purity', 'Gradient Slope', 'Flow Rate', 'Column Temp', 'Peak Resolution', 'Assay Accuracy'], 'Target': ['Peak Resolution', 'Peak Resolution', 'Peak Resolution', 'Assay Precision', 'Assay Accuracy', 'Final Purity Result', 'Final Purity Result'], 'Value': [8, 5, 10, 7, 6, 12, 10]})
+    automation_candidates = pd.DataFrame({
+        'Assay': ['ELISA (mAb-202)', 'ddPCR Plate Prep', 'CE-SDS Sample Prep', 'HPLC Mobile Phase Prep'],
+        'Manual Throughput (Samples/FTE/Wk)': [40, 80, 60, 200],
+        'Est. Automation Throughput': [400, 400, 180, 200],
+        'Error Rate (Manual)': [0.08, 0.05, 0.03, 0.01],
+        'Est. Error Rate (Auto)': [0.01, 0.01, 0.01, 0.01],
+        'Automation Priority Score': [9.5, 8.0, 6.5, 2.0]
+    })
 
     return (team_df, lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, 
             p_df, np_df, c_df, u_df, stability_df, tost_df, screening_df, doe_df, 
             oos_df, backlog_df, maintenance_df, sankey_df, 
             tat_data, program_data, tech_roadmap_data, workflow_data, training_data, 
-            program_analytical_methods, transfer_data)
+            program_analytical_methods, transfer_data, validation_data, automation_candidates)
 
 # ======================================================================================
 # SECTION 4: PLOTTING & ANALYSIS FUNCTIONS
@@ -332,7 +318,6 @@ def plot_zone_chart(df):
     fig.update_layout(title="<b>Zone Chart for Seal Strength with Sensitizing Rules</b>", yaxis_title="Seal Strength (N)", xaxis_title="Sample Number")
     st.plotly_chart(fig, use_container_width=True)
     st.warning("**Actionable Insight:** Although no single point is out of control, the Zone Chart detected a run of 8 consecutive points below the center line. This non-random pattern indicates a systematic process shift. **Decision:** This early warning triggers an investigation into potential causes like equipment wear or material changes during the next planned maintenance cycle.")
-
 def plot_i_mr_chart(df):
     render_full_chart_briefing(context="Monitoring individual measurements where assessing both process mean and variability is critical.", significance="This enhanced I-MR chart automatically applies and visualizes Nelson Rules, detecting non-random patterns (like trends or shifts) within control limits that would be missed by simple UCL/LCL breaches, providing an earlier warning of process instability.", regulatory="Goes beyond basic SPC to demonstrate a mature process monitoring program. Using sensitizing rules like Nelson Rules is a best practice for Continued Process Verification (**FDA Guidance**) and demonstrates a proactive approach to quality management (**ICH Q10**).")
     i_data = df['Purity']
@@ -396,9 +381,8 @@ def plot_cpk_analysis(df):
         st.success(f"**Actionable Insight:** The process is highly capable against both specification (Cpk={cpk:.2f}) and internal guard band (Cpk-GB={cpk_gb:.2f}) limits. **Decision:** The process is robust and approved for routine manufacturing. Monitoring can continue at a standard frequency.")
     else:
         st.error(f"**Actionable Insight:** The Cpk of {cpk:.2f} is below the required 1.33. The process is not capable. **Decision:** Halt process validation. A full root cause analysis is required to re-develop the process to reduce variability or re-center the mean.")
-   
+
 def plot_hotelling_t2_chart(df):
-    # SME FIX: The entire block below was missing its indentation. This has been corrected.
     render_full_chart_briefing(context="Simultaneously monitoring two correlated CQAs from a bioreactor run.", significance="This advanced example includes a **Contribution Plot**, a critical diagnostic tool. When the T² chart signals an anomaly, the contribution plot immediately identifies *which* variable was most responsible for the out-of-control signal, directing the investigation efficiently.", regulatory="Using multivariate control charts demonstrates a mature understanding of process interactions (**ICH Q8**). Including contribution plots shows a sophisticated and systematic approach to investigations (**21 CFR 211.192**), moving beyond guessing to data-driven diagnosis.")
     data = df.values
     mean_vec = data.mean(axis=0)
@@ -589,33 +573,24 @@ def get_maint_model(_df):
 def run_hplc_maintenance_model(df):
     render_full_chart_briefing(context="Managing a fleet of HPLC instruments.", significance="This tool provides a real-time risk score and explains which factors are most important for the model's prediction, enabling proactive and justifiable maintenance planning.", regulatory="A predictive, risk-based approach aligns with **ICH Q9**. Explaining the model's reasoning via feature importances supports a strong justification for maintenance decisions during audits, aligning with the principles of Computer Software Assurance (CSA).")
     model, feature_names = get_maint_model(df)
-    
     st.subheader("Interactive 'What-If' Maintenance Planner")
     col1, col2, col3 = st.columns(3);
     hours = col1.slider("Total Run Hours", 50, 1000, 750, key='hours');
     spikes = col2.slider("Pressure Spikes >100psi", 0, 20, 18, key='spikes');
     age = col3.slider("Column Age (Days)", 10, 300, 280, key='age')
-    
     input_df = pd.DataFrame([[hours, spikes, age]], columns=feature_names)
     pred_prob = model.predict_proba(input_df)[0][1]
-    
     colA, colB = st.columns([1,2])
     with colA:
         fig_gauge = go.Figure(go.Indicator(mode = "gauge+number", value = pred_prob * 100, title = {'text': "Maintenance Risk Score"}, gauge = {'axis': {'range': [None, 100]}, 'bar': {'color': ERROR_RED if pred_prob > 0.7 else WARNING_AMBER if pred_prob > 0.4 else SUCCESS_GREEN}}))
         fig_gauge.update_layout(height=300, margin=dict(t=50, b=0)); st.plotly_chart(fig_gauge, use_container_width=True)
     with colB:
-        # SME FIX: Replaced the unstable SHAP plot with a stable and informative
-        # feature importance plot, which is built-in to scikit-learn's tree-based models.
         st.subheader("Model Explainability: Feature Importance")
         st.info("This plot shows the factors the model weighs most heavily when calculating the risk score.")
-        
-        # Create a DataFrame for plotting
         importance_df = pd.DataFrame({
             'Feature': feature_names,
             'Importance': model.feature_importances_
         }).sort_values(by='Importance', ascending=True)
-        
-        # Create and display the plot
         fig_importance = px.bar(
             importance_df,
             x='Importance',
@@ -668,7 +643,7 @@ def render_troubleshooting_flowchart():
 # ======================================================================================
 # SECTION 5: PAGE RENDERING FUNCTIONS
 # ======================================================================================
-def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap_data, workflow_data, training_data, program_analytical_methods):
+def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap_data, workflow_data, training_data, program_analytical_methods, risk_register_data):
     st.title("Executive & Strategic Hub")
     render_manager_briefing(
         title="Leading the AD Operations & Process Development Support Function",
@@ -678,6 +653,7 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
         quality_pillar="Leadership, Operational Excellence & Strategic Planning.",
         risk_mitigation="Proactively manages team capacity, identifies program risks early, and ensures the function's technology remains state-of-the-art."
     )
+    
     st.subheader("High-Throughput Operations KPIs", divider='violet')
     kpi1, kpi2, kpi3 = st.columns(3)
     current_tat = tat_data['TAT_Days'].iloc[-1]
@@ -688,17 +664,20 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
     fig_tat.add_hline(y=target_tat, line_dash='dash', line_color=SUCCESS_GREEN)
     fig_tat.update_layout(height=150, margin=dict(t=10, b=20, l=0, r=0), yaxis_title="Days", xaxis_title="")
     kpi1.plotly_chart(fig_tat, use_container_width=True)
+    
     team_capacity = 95
     kpi2.metric("Team Utilization / Capacity", f"{team_capacity}%")
     fig_capacity = go.Figure(go.Bar(x=[team_capacity], y=['Utilization'], orientation='h', text=f"{team_capacity}%", textposition='inside', marker_color=WARNING_AMBER if team_capacity > 90 else SUCCESS_GREEN))
     fig_capacity.update_layout(xaxis=dict(range=[0, 100], showticklabels=True, title=""), yaxis=dict(showticklabels=False), height=50, margin=dict(t=0, b=0, l=0, r=0), plot_bgcolor='rgba(0,0,0,0)')
     kpi2.plotly_chart(fig_capacity, use_container_width=True)
     kpi2.markdown(f"<small>At **{team_capacity}%**, the team is nearing full capacity. This data supports the need for an additional FTE in the next budget cycle to prevent burnout and project delays.</small>", unsafe_allow_html=True)
+    
     methods_complete = 12
     methods_transferring = 3
     methods_in_dev = 5
     kpi3.metric("Methods Transferred to QC (YTD)", methods_complete, f"{methods_transferring} in progress")
     kpi3.markdown(f"**Pipeline:** `{methods_in_dev}` new methods in development for transfer in the next two quarters.")
+
     st.subheader("High-Throughput Testing Workflow Funnel (Weekly)", divider='violet')
     col1, col2 = st.columns([2,1])
     with col1:
@@ -713,6 +692,7 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
         2.  **Process:** Develop standardized data templates to accelerate review.
         3.  **Technology:** Prioritize LIMS integration to automate data flagging.
         **Expected Outcome:** Reduce review time by 50% and achieve target TAT of 8 days by next quarter.""")
+
     st.subheader("Program Leadership & Technology Roadmap", divider='violet')
     col1, col2 = st.columns([3, 2])
     with col1:
@@ -732,7 +712,22 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
     with col2:
         st.markdown("##### **Strategic Technology & Automation Pipeline**")
         st.dataframe(tech_roadmap_data, use_container_width=True, hide_index=True)
-        st.markdown("<small>**Actionable Insight:** The deployed Automated Liquid Handler is on track to meet its 18-month ROI target based on realized FTE savings.**Decision:** Use this successful ROI as a blueprint to justify the capital expenditure for the Next-Gen ddPCR platform in the upcoming budget cycle..</small>", unsafe_allow_html=True)
+        st.markdown("<small>**Actionable Insight:** The deployed Automated Liquid Handler is on track to meet its 18-month ROI target based on realized FTE savings. **Decision:** Use this successful ROI as a blueprint to justify the capital expenditure for the Next-Gen ddPCR platform in the upcoming budget cycle.</small>", unsafe_allow_html=True)
+    
+    st.subheader("Cross-Functional Risk & Dependency Register", divider='violet')
+    render_full_chart_briefing(
+        context="AD Ops is a critical partner to the Process Development (PD) teams. Our analytical timelines and capabilities directly impact their ability to execute experiments.",
+        significance="This register provides a transparent, shared view of all key analytical dependencies, allowing for proactive risk management and joint problem-solving with our PD partners. It demonstrates our commitment to the overall success of the Process Development Team.",
+        regulatory="A documented risk register is a key component of a mature Quality Risk Management (QRM) program as outlined in **ICH Q9**."
+    )
+    def style_risk(s):
+        if s == 'High': return f"background-color: {ERROR_RED}; color: white;"
+        if s == 'Medium': return f"background-color: {WARNING_AMBER}; color: black;"
+        if s == 'Low': return f"background-color: {SUCCESS_GREEN}; color: white;"
+        return ''
+    st.dataframe(risk_register_data.style.apply(lambda row: row.apply(style_risk), subset=['Risk Level']), use_container_width=True, hide_index=True)
+    st.error("**Actionable Insight:** The Downstream team's process development is blocked by the lack of a validated purity method for a new resin. This is the highest risk to the AAV-101 program timeline. **Decision:** Personally chair a daily stand-up with the lead scientist and Downstream representative until the bridge study is complete to ensure rapid resolution.")
+    
     st.subheader("Team Management & GxP Compliance", divider='violet')
     col1, col2 = st.columns(2)
     with col1:
@@ -746,22 +741,7 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
         fig_training.update_layout(xaxis_title="Completion Rate (%)", yaxis_title="", xaxis=dict(range=[0, 100]), height=250, margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig_training, use_container_width=True)
         st.warning("**Actionable Insight:** The training completion for 'SOP-205: ddPCR Data Analysis' is only at 50%. This is a compliance risk and a bottleneck for the AAV-101 program. **Decision:** Schedule a mandatory training session for all relevant personnel by the end of next week. Update training records immediately upon completion to be inspection-ready.")
-        
-    st.subheader("Cross-Functional Risk & Dependency Register", divider='violet')
-    render_full_chart_briefing(
-        context="AD Ops is a critical partner to the Process Development (PD) teams. Our analytical timelines and capabilities directly impact their ability to execute experiments.",
-        significance="This register provides a transparent, shared view of all key analytical dependencies, allowing for proactive risk management and joint problem-solving with our PD partners. It demonstrates our commitment to the overall success of the Process Development Team.",
-        regulatory="A documented risk register is a key component of a mature Quality Risk Management (QRM) program as outlined in **ICH Q9**."
-    )
 
-    def style_risk(s):
-        if s == 'High': return f"background-color: {ERROR_RED}; color: white;"
-        if s == 'Medium': return f"background-color: {WARNING_AMBER}; color: black;"
-        if s == 'Low': return f"background-color: {SUCCESS_GREEN}; color: white;"
-        return ''
-
-    st.dataframe(risk_register_data.style.apply(lambda row: row.apply(style_risk), subset=['Risk Level']), use_container_width=True, hide_index=True)
-    st.error("**Actionable Insight:** The Downstream team's process development is blocked by the lack of a validated purity method for a new resin. This is the highest risk to the AAV-101 program timeline. **Decision:** Personally chair a daily stand-up with the lead scientist and Downstream representative until the bridge study is complete to ensure rapid resolution.")
 def render_statistical_toolkit_page(lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df):
     st.title("Advanced Statistical Toolkit")
     render_manager_briefing(title="Applying Statistical Rigor to Analytical Problems", content="This hub serves as a comprehensive toolkit for applying Statistical Process Control (SPC) to both analytical and manufacturing data, enabling robust monitoring and problem-solving.", reg_refs="ICH Q9, 21 CFR 211.165(d)", business_impact="Ensures decisions are based on objective statistical evidence rather than intuition, leading to more reliable processes and fewer quality events.", quality_pillar="Statistical Thinking & Data Literacy.", risk_mitigation="Detects process drifts and capability issues early, before they result in Out-of-Specification (OOS) results.")
@@ -770,10 +750,24 @@ def render_statistical_toolkit_page(lj_df, ewma_df, cusum_df, zone_df, imr_df, c
     with tab2: st.subheader("Tools for Monitoring Attribute (Count/Fail) Data", divider='violet'); plot_p_chart(p_df); plot_np_chart(np_df); plot_c_chart(c_df); plot_u_chart(u_df)
     with tab3: st.subheader("Tools for Deeper Process Understanding", divider='violet'); plot_hotelling_t2_chart(t2_df); plot_cpk_analysis(cpk_df)
 
-def render_lifecycle_hub_page(stability_df, tost_df, screening_df, doe_df, transfer_data):
+def render_lifecycle_hub_page(stability_df, tost_df, screening_df, doe_df, transfer_data, validation_data):
     st.title("Method & Product Lifecycle Hub")
     render_manager_briefing(title="Guiding Methods from R&D to Commercial Launch", content="This hub demonstrates the strategic oversight of the entire analytical and product lifecycle, from initial development using QbD principles to post-approval changes and stability monitoring.", reg_refs="ICH Q1E, Q12, Q8/Q14", business_impact="Creates robust methods that are fit for purpose, accelerates development timelines, and simplifies post-approval changes by building deep process understanding.", quality_pillar="Lifecycle Management & Scientific Rigor.", risk_mitigation="Front-loads risk management into the development phase, reducing the likelihood of late-stage failures during validation or routine use.")
     st.subheader("Early-Stage: Quality by Design (QbD) for Method Development", divider='violet'); render_doe_suite(screening_df, doe_df)
+    
+    st.subheader("Method Validation & Robustness Summary", divider='violet')
+    render_full_chart_briefing(
+        context="Before a method can be transferred or used for GxP testing, it must be formally validated to demonstrate it is fit for purpose.",
+        significance="This dashboard summarizes the key performance characteristics from validation studies against pre-defined acceptance criteria, providing a clear pass/fail status and ensuring regulatory compliance.",
+        regulatory="Method validation is a mandatory cGMP requirement detailed in **ICH Q2(R1)**. This summary provides objective evidence of compliance for audits and regulatory filings."
+    )
+    with st.expander("Show Detailed Validation Data"):
+        st.dataframe(validation_data, use_container_width=True, hide_index=True)
+    summary = validation_data.groupby('Method')['Status'].apply(lambda x: (x == 'Pass').all()).reset_index()
+    summary['Status Icon'] = summary['Status'].apply(lambda x: '✅' if x else '❌')
+    summary['Overall Status'] = summary['Status'].apply(lambda x: 'Validated' if x else 'Validation Failed')
+    st.dataframe(summary[['Method', 'Overall Status', 'Status Icon']], use_container_width=True, hide_index=True)
+
     st.subheader("Method Transfer Readiness Dashboard (AD to QC)", divider='violet')
     render_full_chart_briefing(context="As the 'Sending Unit', AD Ops is responsible for ensuring a seamless and successful transfer of validated methods to the 'Receiving Unit' (QC).", significance="This dashboard provides a real-time, task-level view of all ongoing method transfers. It allows for proactive risk identification and resource allocation to prevent delays in program timelines.", regulatory="A well-documented and controlled method transfer process is a critical component of **ICH Q10** and is essential for maintaining a state of cGMP compliance.")
     program_to_view = st.selectbox("Select Program to View Transfer Status:", transfer_data['Program'].unique())
@@ -787,42 +781,19 @@ def render_lifecycle_hub_page(stability_df, tost_df, screening_df, doe_df, trans
     st.dataframe(display_df.style.apply(lambda row: row.apply(style_transfer_status), subset=['Status']), use_container_width=True, hide_index=True)
     st.error("**Actionable Insight:** The transfer protocol for the mAb-202 Charge Variant assay is 'At Risk' due to competing priorities for the lead scientist. This will delay the start of QC validation. **Decision:** Assign a junior scientist to complete the first draft based on the validation report, freeing up the lead to review and finalize. This mitigates the immediate risk to the program timeline.")
     st.subheader("Late-Stage: Commercial & Post-Approval Support", divider='violet'); plot_stability_analysis(stability_df); plot_method_equivalency_tost(tost_df)
-    st.subheader("Method Validation & Robustness Summary", divider='violet')
-    render_full_chart_briefing(
-        context="Before a method can be transferred or used for GxP testing, it must be formally validated to demonstrate it is fit for purpose.",
-        significance="This dashboard summarizes the key performance characteristics from validation studies against pre-defined acceptance criteria, providing a clear pass/fail status and ensuring regulatory compliance.",
-        regulatory="Method validation is a mandatory cGMP requirement detailed in **ICH Q2(R1)**. This summary provides objective evidence of compliance for audits and regulatory filings."
-    )
 
-    # Use st.expander to keep the page clean
-    with st.expander("Show Detailed Validation Data"):
-        st.dataframe(validation_data, use_container_width=True, hide_index=True)
-
-    # High-level summary chart
-    summary = validation_data.groupby('Method')['Status'].apply(lambda x: (x == 'Pass').all()).reset_index()
-    summary['Status Icon'] = summary['Status'].apply(lambda x: '✅' if x else '❌')
-    summary['Overall Status'] = summary['Status'].apply(lambda x: 'Validated' if x else 'Validation Failed')
-    
-    st.dataframe(summary[['Method', 'Overall Status', 'Status Icon']], use_container_width=True, hide_index=True)
-
-# In render_predictive_hub_page function:
 def render_predictive_hub_page(oos_df, backlog_df, maintenance_df, automation_candidates):
     st.title("Predictive Operations & Diagnostics")
     render_manager_briefing(title="Building a Proactive, Data-Driven Operations Function", content="This hub showcases a forward-looking leadership approach that uses data science and machine learning to move from reactive problem-solving to proactive planning and risk mitigation.", reg_refs="ICH Q9, FDA's CSA Guidance", business_impact="Maximizes instrument uptime, accelerates investigations, and allows for data-driven resource planning, ultimately reducing operational costs and timelines.", quality_pillar="Predictive Analytics & Continuous Improvement.", risk_mitigation="Anticipates future bottlenecks, equipment failures, and quality issues before they can impact the organization.")
-    st.subheader("Predictive Diagnostics & Troubleshooting", divider='violet'); run_oos_prediction_model(oos_df)
-    st.subheader("Proactive Resource & Maintenance Planning", divider='violet'); plot_backlog_forecast(backlog_df); run_hplc_maintenance_model(maintenance_df)
-
+    
     tab1, tab2, tab3 = st.tabs(["**📈 Proactive Planning**", "**🔬 Predictive Diagnostics**", "**🤖 Automation Pipeline**"])
-
     with tab1:
         st.subheader("Proactive Resource & Maintenance Planning")
         plot_backlog_forecast(backlog_df)
         run_hplc_maintenance_model(maintenance_df)
-
     with tab2:
         st.subheader("Predictive Diagnostics & Troubleshooting")
         run_oos_prediction_model(oos_df)
-
     with tab3:
         st.subheader("Lab of the Future: Automation Candidate Matrix")
         render_full_chart_briefing(
@@ -832,6 +803,7 @@ def render_predictive_hub_page(oos_df, backlog_df, maintenance_df, automation_ca
         )
         st.dataframe(automation_candidates.sort_values('Automation Priority Score', ascending=False), use_container_width=True, hide_index=True)
         st.success("**Actionable Insight:** The ELISA for mAb-202 has the highest Automation Priority Score due to its low manual throughput and high error rate. **Decision:** Initiate a formal evaluation of automated ELISA platforms this quarter. This aligns with our Technology Roadmap and will be our top capital request for the next fiscal year.")
+
 def render_qbd_quality_systems_hub_page(sankey_df):
     st.title("QbD & Quality Systems Hub")
     render_manager_briefing(title="Integrating Quality Systems into Analytical Development", content="This hub demonstrates a deep understanding of modern quality systems and how to embed them into the daily work of an analytical development lab, ensuring compliance and scientific excellence.", reg_refs="ICH Q8, Q9, Q10; 21 CFR 820.30; 21 CFR 211.192", business_impact="Creates more robust methods, reduces validation failures, and ensures investigations are thorough, compliant, and effective.", quality_pillar="Proactive Quality & Systematic Problem Solving.", risk_mitigation="Moves the function from a 'test-and-fix' mentality to a 'design-and-understand' paradigm, reducing overall compliance risk.")
@@ -849,13 +821,13 @@ selection = st.sidebar.radio("Go to", list(PAGES.keys()))
  p_df, np_df, c_df, u_df, stability_df, tost_df, screening_df, doe_df, 
  oos_df, backlog_df, maintenance_df, sankey_df, 
  tat_data, program_data, tech_roadmap_data, workflow_data, training_data, 
- program_analytical_methods, transfer_data) = generate_master_data()
+ program_analytical_methods, transfer_data, validation_data, automation_candidates) = generate_master_data()
 
 page_function = PAGES[selection]
-if selection == "Executive & Strategic Hub": page_function(team_df, tat_data, program_data, tech_roadmap_data, workflow_data, training_data, program_analytical_methods)
+if selection == "Executive & Strategic Hub": page_function(team_df, tat_data, program_data, tech_roadmap_data, workflow_data, training_data, program_analytical_methods, risk_register_data)
 elif selection == "QbD & Quality Systems Hub": page_function(sankey_df)
-elif selection == "Method & Product Lifecycle Hub": page_function(stability_df, tost_df, screening_df, doe_df, transfer_data)
-elif selection == "Predictive Operations & Diagnostics": page_function(oos_df, backlog_df, maintenance_df)
+elif selection == "Method & Product Lifecycle Hub": page_function(stability_df, tost_df, screening_df, doe_df, transfer_data, validation_data)
+elif selection == "Predictive Operations & Diagnostics": page_function(oos_df, backlog_df, maintenance_df, automation_candidates)
 elif selection == "Advanced Statistical Toolkit": page_function(lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df)
 
 st.sidebar.markdown("---"); st.sidebar.markdown("### Role Focus"); st.sidebar.info("This portfolio is for an **Associate Director, Analytical Development Operations** role, demonstrating leadership in building high-throughput testing functions, managing the method lifecycle, and applying advanced statistical methods."); st.sidebar.markdown("---"); st.sidebar.markdown("### Key Regulatory & Quality Frameworks")
