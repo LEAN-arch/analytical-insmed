@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v13.1 - Final, Fully Restored & Enhanced Version
+# v13.2 - Final, Fully Restored & Enhanced Version
 # ======================================================================================
 
 import streamlit as st
@@ -297,7 +297,6 @@ def plot_zone_chart(df):
     fig.update_layout(title="<b>Zone Chart for Seal Strength with Sensitizing Rules</b>", yaxis_title="Seal Strength (N)", xaxis_title="Sample Number")
     st.plotly_chart(fig, use_container_width=True)
     st.warning("**Actionable Insight:** Although no single point is out of control, the Zone Chart detected a run of 8 consecutive points below the center line. This non-random pattern indicates a systematic process shift. **Decision:** This early warning triggers an investigation into potential causes like equipment wear or material changes during the next planned maintenance cycle.")
-
 def plot_i_mr_chart(df):
     render_full_chart_briefing(context="Monitoring individual measurements where assessing both process mean and variability is critical.", significance="This enhanced I-MR chart automatically applies and visualizes Nelson Rules, detecting non-random patterns (like trends or shifts) within control limits that would be missed by simple UCL/LCL breaches, providing an earlier warning of process instability.", regulatory="Goes beyond basic SPC to demonstrate a mature process monitoring program. Using sensitizing rules like Nelson Rules is a best practice for Continued Process Verification (**FDA Guidance**) and demonstrates a proactive approach to quality management (**ICH Q10**).")
     i_data = df['Purity']
@@ -464,6 +463,40 @@ def render_doe_suite(screening_df, doe_df):
         st.info("The contour plot defines the Method Operable Design Region (MODR). The method setpoint will be chosen at the center of this space for maximum robustness.")
     st.success("**Actionable Insight:** The two-phase DOE approach provides a highly efficient and scientifically sound path to a robust method. **Decision:** Finalize the method SOP with the setpoints derived from the RSM optimization and proceed to formal validation.")
 
+def plot_stability_analysis(df):
+    render_full_chart_briefing(context="Analyzing long-term stability data from three different validation batches to establish a unified shelf-life.", significance="Follows **ICH Q1E** guidance by first testing for batch poolability using **ANCOVA (Analysis of Covariance)**. This statistically justifies using a single shelf-life estimate across all batches, a critical requirement for regulatory submission.", regulatory="Directly implements the statistical methodology prescribed in **ICH Q1E: Evaluation of Stability Data**, specifically regarding the analysis of data from multiple batches. This demonstrates a high level of regulatory compliance.")
+    spec_limit = 90.0
+    model = ols('Potency_pct ~ Time_months * C(Batch)', data=df).fit()
+    anova_table = anova_lm(model, typ=2)
+    p_value_interaction = anova_table['PR(>F)']['Time_months:C(Batch)']
+    col1, col2 = st.columns([3,1])
+    with col1:
+        fig = px.scatter(df, x='Time_months', y='Potency_pct', color='Batch', title="<b>ICH Q1E Multi-Batch Stability & Poolability Analysis</b>", color_discrete_sequence=px.colors.qualitative.Plotly)
+        fig.add_hline(y=spec_limit, line_dash='dash', line_color=ERROR_RED, annotation_text="Spec Limit")
+        pooled_justified = p_value_interaction >= 0.25
+        shelf_life = 0
+        if pooled_justified:
+            slope, intercept, _, _, _ = stats.linregress(df['Time_months'], df['Potency_pct'])
+            if slope < 0:
+                shelf_life = (spec_limit - intercept) / slope
+                fig.add_trace(go.Scatter(x=df['Time_months'], y=intercept + slope * df['Time_months'], name='Pooled Regression', line=dict(color='black', width=4, dash='dash')))
+                fig.add_vline(x=shelf_life, line_dash='dot', line_color=SUCCESS_GREEN, annotation_text=f"Pooled Shelf Life: {shelf_life:.1f} mo")
+        else: 
+            for batch in df['Batch'].unique():
+                batch_df = df[df['Batch'] == batch]
+                slope, intercept, _, _, _ = stats.linregress(batch_df['Time_months'], batch_df['Potency_pct'])
+                fig.add_trace(go.Scatter(x=batch_df['Time_months'], y=intercept + slope * batch_df['Time_months'], name=f'{batch} Fit', line=dict(width=2)))
+        st.plotly_chart(fig, use_container_width=True)
+    with col2:
+        st.subheader("Batch Poolability Test (ANCOVA)")
+        st.metric("P-value for Interaction (Slopes)", f"{p_value_interaction:.3f}")
+        if pooled_justified:
+            st.success(f"**P-value ({p_value_interaction:.3f}) > 0.25**\n\nBatches are poolable. A single shelf life is statistically justified.")
+            st.success(f"**Actionable Insight:** The ANCOVA test confirms no significant difference between batch degradation rates. **Decision:** Propose a unified shelf life of **{int(shelf_life)} months** in the regulatory filing, using this statistical analysis as justification.")
+        else:
+            st.error(f"**P-value ({p_value_interaction:.3f}) < 0.25**\n\nBatches are NOT poolable. The shortest shelf life must be used.")
+            st.error("**Actionable Insight:** The ANCOVA test shows a significant difference in degradation rates between batches. **Decision:** The batches cannot be pooled. The product shelf life must be set based on the worst-performing batch. An investigation into the cause of inter-batch variability is required.")
+
 def plot_method_equivalency_tost(df):
     render_full_chart_briefing(context="Comparing a new UPLC method against a legacy HPLC method.", significance="This analysis pairs the standard **TOST (Two One-Sided T-Tests)** for equivalence with a **Bland-Altman plot**. The Bland-Altman plot is crucial for revealing if the bias between methods is constant or if it changes with the magnitude of the result, providing a much deeper understanding of method agreement.", regulatory="TOST is the gold standard for equivalence (**ICH Q12**). The addition of a Bland-Altman plot demonstrates a more thorough analysis, often expected by regulators for method transfer or validation studies to ensure there are no hidden systematic errors.")
     diff = df['UPLC'] - df['HPLC']; n = len(diff); mean_diff = diff.mean(); std_diff = diff.std(ddof=1);
@@ -599,8 +632,6 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
         quality_pillar="Leadership, Operational Excellence & Strategic Planning.",
         risk_mitigation="Proactively manages team capacity, identifies program risks early, and ensures the function's technology remains state-of-the-art."
     )
-    
-    # --- KPI Dashboard ---
     st.subheader("High-Throughput Operations KPIs", divider='violet')
     kpi1, kpi2, kpi3 = st.columns(3)
     current_tat = tat_data['TAT_Days'].iloc[-1]
@@ -611,21 +642,17 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
     fig_tat.add_hline(y=target_tat, line_dash='dash', line_color=SUCCESS_GREEN)
     fig_tat.update_layout(height=150, margin=dict(t=10, b=20, l=0, r=0), yaxis_title="Days", xaxis_title="")
     kpi1.plotly_chart(fig_tat, use_container_width=True)
-    
-    # SME FIX: Replaced st.progress with a more informative Plotly bar chart
     team_capacity = 95
     kpi2.metric("Team Utilization / Capacity", f"{team_capacity}%")
     fig_capacity = go.Figure(go.Bar(x=[team_capacity], y=['Utilization'], orientation='h', text=f"{team_capacity}%", textposition='inside', marker_color=WARNING_AMBER if team_capacity > 90 else SUCCESS_GREEN))
     fig_capacity.update_layout(xaxis=dict(range=[0, 100], showticklabels=True, title=""), yaxis=dict(showticklabels=False), height=50, margin=dict(t=0, b=0, l=0, r=0), plot_bgcolor='rgba(0,0,0,0)')
     kpi2.plotly_chart(fig_capacity, use_container_width=True)
     kpi2.markdown(f"<small>At **{team_capacity}%**, the team is nearing full capacity. This data supports the need for an additional FTE in the next budget cycle to prevent burnout and project delays.</small>", unsafe_allow_html=True)
-    
     methods_complete = 12
     methods_transferring = 3
     methods_in_dev = 5
     kpi3.metric("Methods Transferred to QC (YTD)", methods_complete, f"{methods_transferring} in progress")
     kpi3.markdown(f"**Pipeline:** `{methods_in_dev}` new methods in development for transfer in the next two quarters.")
-
     st.subheader("High-Throughput Testing Workflow Funnel (Weekly)", divider='violet')
     col1, col2 = st.columns([2,1])
     with col1:
@@ -640,7 +667,6 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
         2.  **Process:** Develop standardized data templates to accelerate review.
         3.  **Technology:** Prioritize LIMS integration to automate data flagging.
         **Expected Outcome:** Reduce review time by 50% and achieve target TAT of 8 days by next quarter.""")
-
     st.subheader("Program Leadership & Technology Roadmap", divider='violet')
     col1, col2 = st.columns([3, 2])
     with col1:
@@ -661,7 +687,6 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
         st.markdown("##### **Strategic Technology & Automation Pipeline**")
         st.dataframe(tech_roadmap_data, use_container_width=True, hide_index=True)
         st.markdown("<small>**Actionable Insight:** The deployed Automated Liquid Handler is projected to save 20 FTE hours/week. **Decision:** Monitor TAT and Team Utilization KPIs in the next quarter to confirm this efficiency gain is realized and report the ROI to senior leadership.</small>", unsafe_allow_html=True)
-    
     st.subheader("Team Management & GxP Compliance", divider='violet')
     col1, col2 = st.columns(2)
     with col1:
@@ -670,7 +695,6 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
         st.markdown("<small>**Actionable Insight:** The AAV-101 program requires deep ddPCR expertise, which is currently a single point of failure with S. Smith. **Decision:** Prioritize M. Lee's cross-training on ddPCR, as outlined in the development plan, to mitigate this risk.</small>", unsafe_allow_html=True)
     with col2:
         st.markdown("##### **Training & Compliance Status**")
-        # SME FIX: Replaced st.progress with a more informative Plotly bar chart
         fig_training = px.bar(training_data, y='Module', x='Team Completion', orientation='h', text='Team Completion')
         fig_training.update_traces(texttemplate='%{x}%', textposition='inside', marker_color=PRIMARY_COLOR)
         fig_training.update_layout(xaxis_title="Completion Rate (%)", yaxis_title="", xaxis=dict(range=[0, 100]), height=250, margin=dict(t=0, b=0, l=0, r=0))
@@ -736,4 +760,4 @@ elif selection == "Predictive Operations & Diagnostics": page_function(oos_df, b
 elif selection == "Advanced Statistical Toolkit": page_function(lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df)
 
 st.sidebar.markdown("---"); st.sidebar.markdown("### Role Focus"); st.sidebar.info("This portfolio is for an **Associate Director, Analytical Development Operations** role, demonstrating leadership in building high-throughput testing functions, managing the method lifecycle, and applying advanced statistical methods."); st.sidebar.markdown("---"); st.sidebar.markdown("### Key Regulatory & Quality Frameworks")
-with st.sidebar.expander("View Applicable Guidelines", expanded=False): st.markdown("- **ICH Q1E, Q2, Q8, Q9, Q10, Q12, Q14**\n- **21 CFR Parts 11, 211, 820.30**\n- **EudraLex Vol. 4, Annex 1 & 15**\n- **ISO 17025, ISO 13485**")
+with st.sidebar.expander("View Applicable Guidelines", expanded=False): st.markdown("- **ICH Q1E, Q2, Q8, Q9, Q10, Q12, Q14**\n- **21 CFR Parts 11, 211, 820.30**\n- **EudraLex Vol. 4, Annex 1 & 15**\n- **ISO 17025, ISO 13485**")    
