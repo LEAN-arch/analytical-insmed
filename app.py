@@ -565,24 +565,33 @@ def get_maint_model(_df):
 def run_hplc_maintenance_model(df):
     render_full_chart_briefing(context="Managing a fleet of HPLC instruments.", significance="This tool provides a real-time risk score and explains which factors are most important for the model's prediction, enabling proactive and justifiable maintenance planning.", regulatory="A predictive, risk-based approach aligns with **ICH Q9**. Explaining the model's reasoning via feature importances supports a strong justification for maintenance decisions during audits, aligning with the principles of Computer Software Assurance (CSA).")
     model, feature_names = get_maint_model(df)
+    
     st.subheader("Interactive 'What-If' Maintenance Planner")
     col1, col2, col3 = st.columns(3);
     hours = col1.slider("Total Run Hours", 50, 1000, 750, key='hours');
     spikes = col2.slider("Pressure Spikes >100psi", 0, 20, 18, key='spikes');
     age = col3.slider("Column Age (Days)", 10, 300, 280, key='age')
+    
     input_df = pd.DataFrame([[hours, spikes, age]], columns=feature_names)
     pred_prob = model.predict_proba(input_df)[0][1]
+    
     colA, colB = st.columns([1,2])
     with colA:
         fig_gauge = go.Figure(go.Indicator(mode = "gauge+number", value = pred_prob * 100, title = {'text': "Maintenance Risk Score"}, gauge = {'axis': {'range': [None, 100]}, 'bar': {'color': ERROR_RED if pred_prob > 0.7 else WARNING_AMBER if pred_prob > 0.4 else SUCCESS_GREEN}}))
         fig_gauge.update_layout(height=300, margin=dict(t=50, b=0)); st.plotly_chart(fig_gauge, use_container_width=True)
     with colB:
+        # SME FIX: Replaced the unstable SHAP plot with a stable and informative
+        # feature importance plot, which is built-in to scikit-learn's tree-based models.
         st.subheader("Model Explainability: Feature Importance")
         st.info("This plot shows the factors the model weighs most heavily when calculating the risk score.")
+        
+        # Create a DataFrame for plotting
         importance_df = pd.DataFrame({
             'Feature': feature_names,
             'Importance': model.feature_importances_
         }).sort_values(by='Importance', ascending=True)
+        
+        # Create and display the plot
         fig_importance = px.bar(
             importance_df,
             x='Importance',
