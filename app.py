@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v10.6 - Final, Fully Debugged & API-Compatible Version
+# v10.7 - Final, Fully Debugged & API-Compatible Version
 # ======================================================================================
 
 import streamlit as st
@@ -115,7 +115,6 @@ def generate_master_data():
     # --- Data for PREDICTIVE HUB ---
     oos_df = pd.DataFrame({'Instrument': np.random.choice(['HPLC-01', 'HPLC-02', 'CE-01'], 100), 'Analyst': np.random.choice(['Smith', 'Lee', 'Chen'], 100), 'Molecule_Type': np.random.choice(['mAb', 'AAV'], 100), 'Root_Cause': np.random.choice(['Sample_Prep_Error', 'Instrument_Malfunction', 'Column_Issue'], 100, p=[0.5, 0.3, 0.2])})
     
-    # Use `.clip(min=...)` for NumPy arrays.
     backlog_vals = 10 + np.arange(104)*0.5 + np.random.normal(0, 5, 104) + np.sin(np.arange(104)/8)*5
     backlog_df = pd.DataFrame({'Week': pd.date_range('2022-01-01', periods=104, freq='W'), 'Backlog': backlog_vals.clip(min=0)})
     
@@ -370,11 +369,12 @@ def run_hplc_maintenance_model(df):
         
         # FIX: For binary classifiers, shap_values and expected_value are lists with two elements (one for each class).
         # We must select the elements for the positive class (class 1) to explain the "Needs_Maint" prediction.
+        # This matches the older SHAP API signature required by the environment.
         expected_value = explainer.expected_value[1]
         shap_values = explainer.shap_values(input_df)[1]
         
         # Pass the base value, shap values (for the single instance), and feature values (as a Series) to the plot.
-        st_shap(shap.force_plot(expected_value, shap_values[0], input_df.iloc[0]), height=150)
+        st_shap(shap.force_plot(expected_value, shap_values[0,:], input_df.iloc[0]), height=150)
 
     st.warning("**Actionable Insight:** The model predicts a very high probability that HPLC-01 requires preventative maintenance. The SHAP analysis reveals that the high number of **Run Hours** and **Pressure Spikes** are the primary drivers of this risk score. **Decision:** Schedule HPLC-01 for maintenance this week, prioritizing it over other instruments with lower risk scores to prevent an unexpected failure during a critical run.")
 
