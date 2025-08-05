@@ -204,7 +204,7 @@ def generate_master_data():
             p_df, np_df, c_df, u_df, stability_df, tost_df, screening_df, doe_df, 
             oos_df, backlog_df, maintenance_df, sankey_df, 
             tat_data, program_data, tech_roadmap_data, workflow_data, training_data, 
-            program_analytical_methods, transfer_data, validation_data, automation_candidates)
+            program_analytical_methods, transfer_data, validation_data, automation_candidates, risk_register_data)
 
 # ======================================================================================
 # SECTION 4: PLOTTING & ANALYSIS FUNCTIONS
@@ -821,7 +821,7 @@ selection = st.sidebar.radio("Go to", list(PAGES.keys()))
  p_df, np_df, c_df, u_df, stability_df, tost_df, screening_df, doe_df, 
  oos_df, backlog_df, maintenance_df, sankey_df, 
  tat_data, program_data, tech_roadmap_data, workflow_data, training_data, 
- program_analytical_methods, transfer_data, validation_data, automation_candidates) = generate_master_data()
+ program_analytical_methods, transfer_data, validation_data, automation_candidates, risk_register_data) = generate_master_data()
 
 page_function = PAGES[selection]
 if selection == "Executive & Strategic Hub": page_function(team_df, tat_data, program_data, tech_roadmap_data, workflow_data, training_data, program_analytical_methods, risk_register_data)
