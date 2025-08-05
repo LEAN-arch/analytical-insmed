@@ -7,28 +7,28 @@
 # ===================================================================
 
 # Core web framework for building the interactive application
-streamlit==1.22.0
+streamlit
 
 # Data manipulation and analysis, used for creating and managing DataFrames
-pandas==1.3.5
+pandas
 
 # Fundamental package for numerical computation, especially for data generation
-numpy==1.21.6
+numpy
 
 # Advanced data visualization for creating interactive charts and graphs
-plotly==5.10.0
+plotly
 
 # Machine Learning library for predictive models and data preprocessing
-scikit-learn==1.0.2
+scikit-learn
 
 # Scientific computing library, used for statistical functions
-scipy==1.7.3
+scipy
 
 # Statistical models, used specifically for time series forecasting
-statsmodels==0.13.5
+statsmodels
 
 # Explainable AI (XAI) library for interpreting model predictions (NEW)
-shap==0.40.0
+shap
 
 # Core plotting library, a dependency for SHAP plots (NEW)
-matplotlib==3.8.4
+matplotlib
