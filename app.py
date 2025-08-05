@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v11.3 - Fully Restored & Robust Version (SME Corrected & Fully Commented)
+# v11.4 - Fully Restored & Robust Version (Leak Fixed)
 # ======================================================================================
 
 import streamlit as st
@@ -256,8 +256,6 @@ def plot_zone_chart(df):
     fig = go.Figure()
 
     zones = {'Zone A (Upper)': [mean + 2*sd, mean + 3*sd], 'Zone B (Upper)': [mean + 1*sd, mean + 2*sd], 'Zone C (Upper)': [mean, mean + 1*sd], 'Zone C (Lower)': [mean - 1*sd, mean], 'Zone B (Lower)': [mean - 2*sd, mean - 1*sd], 'Zone A (Lower)': [mean - 3*sd, mean - 2*sd]}
-    
-    # SME FIX: This dictionary's keys now match the output of `name.split(' ')[1]`, resolving the KeyError.
     colors = {'A': 'rgba(255, 193, 7, 0.2)', 'B': 'rgba(76, 175, 80, 0.2)', 'C': 'rgba(76, 175, 80, 0.1)'}
     
     for name, y_range in zones.items():
@@ -554,13 +552,10 @@ def run_hplc_maintenance_model(df):
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(input_df)
         
-        # SME FIX: This logic robustly handles the output of shap.TreeExplainer for a binary classifier,
-        # resolving the TypeError by selecting the correct base value and SHAP values for the positive class (class 1)
-        # and correctly indexing the arrays for a single prediction.
         if isinstance(shap_values, list) and len(shap_values) == 2:
             expected_value_for_plot = explainer.expected_value[1]
             shap_values_for_plot = shap_values[1][0,:]
-        else: # Fallback for different shap library versions or model types
+        else:
             expected_value_for_plot = explainer.expected_value
             shap_values_for_plot = shap_values[0,:]
         
@@ -595,7 +590,13 @@ def run_interactive_rca_fishbone():
     for i, cat in enumerate(causes.keys()):
         with cols[i % 3]:
             with st.container(border=True):
-                st.markdown(f"**{cat}**"); [st.markdown(f"- {cause}") for cause in causes[cat]]
+                st.markdown(f"**{cat}**")
+                # SME FIX: Replaced the list comprehension with a standard for loop.
+                # This prevents the return values of st.markdown (DeltaGenerator objects)
+                # from being collected into a list and "leaking" onto the page.
+                for cause in causes[cat]:
+                    st.markdown(f"- {cause}")
+
     st.success("**Actionable Insight:** The investigation team uses this structured tool to brainstorm. After testing several hypotheses, the team confirmed through re-analysis with a freshly prepared standard that the **'Reference standard degraded'** (under 'Material') was the true root cause. **Decision:** A CAPA will be initiated to revise the reference standard management SOP to include more frequent stability checks.")
 
 def render_troubleshooting_flowchart():
