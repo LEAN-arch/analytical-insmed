@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v13.4 - Final, Fully Corrected & Role-Specific Version
+# v13.5 - Final, Complete & Role-Specific Version
 # ======================================================================================
 
 import streamlit as st
@@ -318,6 +318,7 @@ def plot_zone_chart(df):
     fig.update_layout(title="<b>Zone Chart for Seal Strength with Sensitizing Rules</b>", yaxis_title="Seal Strength (N)", xaxis_title="Sample Number")
     st.plotly_chart(fig, use_container_width=True)
     st.warning("**Actionable Insight:** Although no single point is out of control, the Zone Chart detected a run of 8 consecutive points below the center line. This non-random pattern indicates a systematic process shift. **Decision:** This early warning triggers an investigation into potential causes like equipment wear or material changes during the next planned maintenance cycle.")
+
 def plot_i_mr_chart(df):
     render_full_chart_briefing(context="Monitoring individual measurements where assessing both process mean and variability is critical.", significance="This enhanced I-MR chart automatically applies and visualizes Nelson Rules, detecting non-random patterns (like trends or shifts) within control limits that would be missed by simple UCL/LCL breaches, providing an earlier warning of process instability.", regulatory="Goes beyond basic SPC to demonstrate a mature process monitoring program. Using sensitizing rules like Nelson Rules is a best practice for Continued Process Verification (**FDA Guidance**) and demonstrates a proactive approach to quality management (**ICH Q10**).")
     i_data = df['Purity']
@@ -343,7 +344,6 @@ def plot_i_mr_chart(df):
     fig.update_layout(height=600, showlegend=False, title_text="<b>I-MR Chart for Reference Standard Purity</b>")
     st.plotly_chart(fig, use_container_width=True)
     st.warning("**Actionable Insight:** Even before any points breached the control limits, the I-chart detected a violation of Nelson Rule #2 (9 consecutive points below the mean), indicating a non-random downward shift. This early warning confirms the reference standard is degrading. **Decision:** Quarantine the current standard and qualify a new one immediately. This proactive measure prevents the generation of invalid data.")
-
 def plot_cpk_analysis(df):
     render_full_chart_briefing(context="Assessing if a validated manufacturing process can reliably meet not just its official specifications, but also its tighter internal 'guard band' limits.", significance="Introduces **Guard-Banded Cpk (Cpk-GB)**, a critical internal metric that measures process capability against tighter, action-oriented limits. This provides an early warning if a process is drifting towards an edge of the specification, even if it's still officially 'in-spec'.", regulatory="Demonstrates a mature, risk-based approach to process control (**ICH Q9**). Maintaining a high Cpk-GB ensures the process stays well within the 'safe' operating space defined in the Design Space (**ICH Q8**), reducing the risk of OOS results.")
     data = df['Titer']
@@ -653,7 +653,6 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
         quality_pillar="Leadership, Operational Excellence & Strategic Planning.",
         risk_mitigation="Proactively manages team capacity, identifies program risks early, and ensures the function's technology remains state-of-the-art."
     )
-    
     st.subheader("High-Throughput Operations KPIs", divider='violet')
     kpi1, kpi2, kpi3 = st.columns(3)
     current_tat = tat_data['TAT_Days'].iloc[-1]
@@ -677,7 +676,6 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
     methods_in_dev = 5
     kpi3.metric("Methods Transferred to QC (YTD)", methods_complete, f"{methods_transferring} in progress")
     kpi3.markdown(f"**Pipeline:** `{methods_in_dev}` new methods in development for transfer in the next two quarters.")
-
     st.subheader("High-Throughput Testing Workflow Funnel (Weekly)", divider='violet')
     col1, col2 = st.columns([2,1])
     with col1:
@@ -692,7 +690,6 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
         2.  **Process:** Develop standardized data templates to accelerate review.
         3.  **Technology:** Prioritize LIMS integration to automate data flagging.
         **Expected Outcome:** Reduce review time by 50% and achieve target TAT of 8 days by next quarter.""")
-
     st.subheader("Program Leadership & Technology Roadmap", divider='violet')
     col1, col2 = st.columns([3, 2])
     with col1:
@@ -713,7 +710,6 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
         st.markdown("##### **Strategic Technology & Automation Pipeline**")
         st.dataframe(tech_roadmap_data, use_container_width=True, hide_index=True)
         st.markdown("<small>**Actionable Insight:** The deployed Automated Liquid Handler is on track to meet its 18-month ROI target based on realized FTE savings. **Decision:** Use this successful ROI as a blueprint to justify the capital expenditure for the Next-Gen ddPCR platform in the upcoming budget cycle.</small>", unsafe_allow_html=True)
-    
     st.subheader("Cross-Functional Risk & Dependency Register", divider='violet')
     render_full_chart_briefing(
         context="AD Ops is a critical partner to the Process Development (PD) teams. Our analytical timelines and capabilities directly impact their ability to execute experiments.",
@@ -727,7 +723,6 @@ def render_executive_strategic_hub(team_df, tat_data, program_data, tech_roadmap
         return ''
     st.dataframe(risk_register_data.style.apply(lambda row: row.apply(style_risk), subset=['Risk Level']), use_container_width=True, hide_index=True)
     st.error("**Actionable Insight:** The Downstream team's process development is blocked by the lack of a validated purity method for a new resin. This is the highest risk to the AAV-101 program timeline. **Decision:** Personally chair a daily stand-up with the lead scientist and Downstream representative until the bridge study is complete to ensure rapid resolution.")
-    
     st.subheader("Team Management & GxP Compliance", divider='violet')
     col1, col2 = st.columns(2)
     with col1:
