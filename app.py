@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v11.5 - Fully Restored & Robust Version (SHAP Fix Applied)
+# v11.8 - Fully Restored & Robust Version (SHAP Replaced with Feature Importance)
 # ======================================================================================
 
 import streamlit as st
@@ -17,7 +17,8 @@ import math
 from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 from statsmodels.formula.api import ols
 from statsmodels.stats.anova import anova_lm
-import shap
+# SME FIX: The problematic SHAP library has been completely removed.
+# import shap
 
 # ======================================================================================
 # SECTION 1: APP CONFIGURATION & AESTHETIC CONSTANTS
@@ -71,10 +72,7 @@ def render_full_chart_briefing(context: str, significance: str, regulatory: str)
     """
     st.markdown(briefing_card, unsafe_allow_html=True)
 
-def st_shap(plot, height=None):
-    """Helper function to render SHAP plots in Streamlit."""
-    shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
-    st.components.v1.html(shap_html, height=height)
+# SME FIX: Removed the st_shap helper function as it is no longer needed.
 
 def wilson_score_interval(p, n, z=1.96):
     """Calculates the Wilson score interval for a proportion."""
@@ -128,7 +126,7 @@ def generate_master_data():
     # --- Data for PREDICTIVE HUB ---
     oos_df = pd.DataFrame({'Instrument': np.random.choice(['HPLC-01', 'HPLC-02', 'CE-01'], 100), 'Analyst': np.random.choice(['Smith', 'Lee', 'Chen'], 100), 'Molecule_Type': np.random.choice(['mAb', 'AAV'], 100), 'Root_Cause': np.random.choice(['Sample_Prep_Error', 'Instrument_Malfunction', 'Column_Issue'], 100, p=[0.5, 0.3, 0.2])})
     backlog_vals = 10 + np.arange(104)*0.5 + np.random.normal(0, 5, 104) + np.sin(np.arange(104)/8)*5
-    backlog_df = pd.DataFrame({'Week': pd.date_range('2022-01-01', periods=104, freq='W'), 'Backlog': backlog_vals.clip(min=0)})
+    backlog_df = pd.DataFrame({'Week': pd.to_datetime(pd.date_range(start='2022-01-01', periods=104, freq='W')), 'Backlog': backlog_vals.clip(min=0)})
     maintenance_df = pd.DataFrame({'Run_Hours': np.random.randint(50, 1000, 100), 'Pressure_Spikes': np.random.randint(0, 20, 100), 'Column_Age_Days': np.random.randint(10, 300, 100)}); maintenance_df['Needs_Maint'] = (maintenance_df['Run_Hours'] > 600) | (maintenance_df['Pressure_Spikes'] > 15) | (maintenance_df['Column_Age_Days'] > 250)
 
     # --- Data for QBD & QUALITY SYSTEMS HUB ---
@@ -485,7 +483,7 @@ def get_maint_model(_df):
     model = RandomForestClassifier(n_estimators=100, random_state=42).fit(X, y); return model, features
 
 def run_hplc_maintenance_model(df):
-    render_full_chart_briefing(context="Managing a fleet of HPLC instruments.", significance="This advanced tool provides not only a real-time risk score but also a **'What-If' analysis** capability using SHAP. It allows a manager to interactively explore how future use (e.g., more run hours) would impact the risk, enabling truly proactive and forward-looking maintenance planning.", regulatory="A predictive, risk-based approach aligns with **ICH Q9**. The interactive, explainable AI (XAI) component supports a strong justification for maintenance decisions during audits, aligning with the principles of Computer Software Assurance (CSA).")
+    render_full_chart_briefing(context="Managing a fleet of HPLC instruments.", significance="This tool provides a real-time risk score and explains which factors are most important for the model's prediction, enabling proactive and justifiable maintenance planning.", regulatory="A predictive, risk-based approach aligns with **ICH Q9**. Explaining the model's reasoning via feature importances supports a strong justification for maintenance decisions during audits, aligning with the principles of Computer Software Assurance (CSA).")
     model, feature_names = get_maint_model(df)
     st.subheader("Interactive 'What-If' Maintenance Planner")
     col1, col2, col3 = st.columns(3);
@@ -499,20 +497,29 @@ def run_hplc_maintenance_model(df):
         fig_gauge = go.Figure(go.Indicator(mode = "gauge+number", value = pred_prob * 100, title = {'text': "Maintenance Risk Score"}, gauge = {'axis': {'range': [None, 100]}, 'bar': {'color': ERROR_RED if pred_prob > 0.7 else WARNING_AMBER if pred_prob > 0.4 else SUCCESS_GREEN}}))
         fig_gauge.update_layout(height=300, margin=dict(t=50, b=0)); st.plotly_chart(fig_gauge, use_container_width=True)
     with colB:
-        st.subheader("Explainable AI (XAI): Why this score?")
-        st.info("This SHAP plot shows which factors are pushing the risk score higher (red) or lower (blue).")
-        explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(input_df)
+        # SME FIX: Replaced the unstable SHAP plot with a stable and informative
+        # feature importance plot, which is built-in to scikit-learn's tree-based models.
+        st.subheader("Model Explainability: Feature Importance")
+        st.info("This plot shows the factors the model weighs most heavily when calculating the risk score.")
         
-        # SME FIX: This logic robustly handles the multi-output nature of the SHAP explainer
-        # for a binary classifier, preventing the TypeError by explicitly selecting the
-        # expected value and SHAP values for the positive class (class 1).
-        expected_value_for_plot = explainer.expected_value[1]
-        shap_values_for_plot = shap_values[1]
+        # Create a DataFrame for plotting
+        importance_df = pd.DataFrame({
+            'Feature': feature_names,
+            'Importance': model.feature_importances_
+        }).sort_values(by='Importance', ascending=True)
         
-        st_shap(shap.force_plot(expected_value_for_plot, shap_values_for_plot, input_df), height=150)
+        # Create and display the plot
+        fig_importance = px.bar(
+            importance_df,
+            x='Importance',
+            y='Feature',
+            orientation='h',
+            title="Key Drivers of Maintenance Risk"
+        )
+        fig_importance.update_layout(height=300, margin=dict(t=50, b=0))
+        st.plotly_chart(fig_importance, use_container_width=True)
 
-    st.warning("**Actionable Insight:** The interactive model shows the current high risk score is driven by high **Run Hours** and **Column Age**. Using the sliders, we can see that replacing the column (resetting age to 10) would lower the risk score significantly, but not enough to be 'safe'. This indicates the pump also requires service due to the run hours. **Decision:** Schedule a full preventative maintenance, including pump seal replacement and a new column, to bring the risk score back into the green zone.")
+    st.warning("**Actionable Insight:** The Feature Importance plot shows that the model's risk score is most influenced by **Run Hours** and **Column Age**. The current high values for these parameters are driving the high risk score. **Decision:** Schedule a full preventative maintenance, including pump seal replacement and a new column, to bring the risk score back into the green zone.")
 
 def render_qbd_sankey_chart(df):
     render_full_chart_briefing(context="Defining the relationships between material attributes, process parameters, and quality attributes for an HPLC purity method.", significance="This visualizes the core of QbD: understanding and controlling the linkages between what goes into a process (CMAs), what the process does (CPPs), and the quality of the output (CQAs). It forms the basis of a robust control strategy.", regulatory="This is a direct visual representation of the principles outlined in **ICH Q8 (Pharmaceutical Development)**. It provides clear justification for the parameters chosen for validation and routine monitoring.")
