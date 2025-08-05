@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v10.3 - Final, Fully Debugged & Environment-Compatible Version
+# v10.4 - Final, Fully Debugged & Robust Version
 # ======================================================================================
 
 import streamlit as st
@@ -115,7 +115,7 @@ def generate_master_data():
     # --- Data for PREDICTIVE HUB ---
     oos_df = pd.DataFrame({'Instrument': np.random.choice(['HPLC-01', 'HPLC-02', 'CE-01'], 100), 'Analyst': np.random.choice(['Smith', 'Lee', 'Chen'], 100), 'Molecule_Type': np.random.choice(['mAb', 'AAV'], 100), 'Root_Cause': np.random.choice(['Sample_Prep_Error', 'Instrument_Malfunction', 'Column_Issue'], 100, p=[0.5, 0.3, 0.2])})
     
-    # FIX: Use `.clip(min=...)` for NumPy arrays.
+    # Use `.clip(min=...)` for NumPy arrays.
     backlog_vals = 10 + np.arange(104)*0.5 + np.random.normal(0, 5, 104) + np.sin(np.arange(104)/8)*5
     backlog_df = pd.DataFrame({'Week': pd.date_range('2022-01-01', periods=104, freq='W'), 'Backlog': backlog_vals.clip(min=0)})
     
@@ -226,7 +226,7 @@ def plot_hotelling_t2_chart(df):
 def plot_p_chart(df):
     render_full_chart_briefing(context="Monitoring the proportion of monthly HPLC System Suitability Tests (SSTs) that fail.", significance="Tracks the failure rate of a key quality system when the number of tests performed each month varies. It provides a high-level view of the health and reliability of an entire analytical system.", regulatory="Directly supports quality system monitoring as required by **21 CFR 211** and **EudraLex Vol. 4**. Tracking SST failures is a critical component of laboratory control and data integrity (**ALCOA+**).")
     df['proportion'] = df['SSTs_Failed'] / df['SSTs_Run']; p_bar = df['SSTs_Failed'].sum() / df['SSTs_Run'].sum(); df['UCL'] = p_bar + 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run']); 
-    # FIX: Use `.clip(lower=...)` for Pandas Series for compatibility with older Pandas versions.
+    # Use `.clip(lower=...)` for Pandas Series for compatibility with older Pandas versions.
     df['LCL'] = (p_bar - 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run'])).clip(lower=0)
     fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Month'], y=df['proportion'], name='Proportion Failed', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Month'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'))); fig.add_hline(y=p_bar, name='Average Fail Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
     fig.update_layout(title='<b>p-Chart for System Suitability Test (SST) Failure Rate</b>', yaxis_title='Proportion of SSTs Failed', yaxis_tickformat=".1%")
@@ -235,7 +235,11 @@ def plot_p_chart(df):
 
 def plot_np_chart(df):
     render_full_chart_briefing(context="Tracking the number of rejected vials with cosmetic defects per batch, where each batch inspection always consists of exactly 50 vials.", significance="Provides a simple, direct way to monitor the number of defective items when the sample size is constant. It is often easier for operators to understand and react to than a proportion-based chart.", regulatory="A fundamental tool for lot acceptance and release testing programs (**21 CFR 211.165**). It provides an ongoing record of quality for in-process controls or final product inspection.")
-    n, p_bar = df['Batches_Sampled'].iloc[0], df['Defective_Vials'].sum() / (len(df) * n); ucl = n * p_bar + 3 * np.sqrt(n * p_bar * (1-p_bar)); lcl = max(0, n * p_bar - 3 * np.sqrt(n * p_bar * (1-p_bar)))
+    # FIX: Split assignment to resolve UnboundLocalError. 'n' must be defined before it is used.
+    n = df['Batches_Sampled'].iloc[0]
+    p_bar = df['Defective_Vials'].sum() / (len(df) * n)
+    ucl = n * p_bar + 3 * np.sqrt(n * p_bar * (1-p_bar))
+    lcl = max(0, n * p_bar - 3 * np.sqrt(n * p_bar * (1-p_bar)))
     fig = go.Figure(go.Scatter(x=df['Week'], y=df['Defective_Vials'], mode='lines+markers')); fig.add_hline(y=ucl, line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=lcl, line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=n*p_bar, line_dash='dot', line_color=SUCCESS_GREEN)
     fig.add_annotation(x=12, y=7, text="<b>Spike Detected</b>", bgcolor=ERROR_RED, font_color='white')
     fig.update_layout(title='<b>np-Chart for Number of Defective Vials per Batch</b>', yaxis_title='Count of Defective Vials (n=50)', xaxis_title='Week')
@@ -254,7 +258,7 @@ def plot_c_chart(df):
 def plot_u_chart(df):
     render_full_chart_briefing(context="Monitoring the rate of particulate defects found during the visual inspection of finished drug product vials, where the number of vials inspected from each batch varies.", significance="Provides a normalized measure of quality (defects per unit) that is comparable across batches of different sizes. This is crucial for accurately assessing process stability when production volumes fluctuate.", regulatory="A more sophisticated tool for lot release and stability testing (**21 CFR 211.165, 211.166**). Using a u-chart over a simpler c-chart demonstrates a higher level of statistical understanding when dealing with variable sample sizes.")
     df['defects_per_unit'] = df['Particulate_Defects'] / df['Vials_Inspected']; u_bar = df['Particulate_Defects'].sum() / df['Vials_Inspected'].sum(); df['UCL'] = u_bar + 3 * np.sqrt(u_bar / df['Vials_Inspected']);
-    # FIX: Use `.clip(lower=...)` for Pandas Series for compatibility with older Pandas versions.
+    # Use `.clip(lower=...)` for Pandas Series for compatibility with older Pandas versions.
     df['LCL'] = (u_bar - 3 * np.sqrt(u_bar / df['Vials_Inspected'])).clip(lower=0)
     fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Batch'], y=df['defects_per_unit'], name='Defect Rate', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Batch'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'))); fig.add_hline(y=u_bar, name='Average Defect Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
     fig.add_annotation(x=11, y=df['defects_per_unit'].iloc[10], text="<b>Spike Detected</b>", bgcolor=ERROR_RED, font_color='white')
@@ -323,7 +327,6 @@ def run_oos_prediction_model(df):
     model, feature_cols = get_oos_rca_model(df)
     col1, col2, col3 = st.columns(3); instrument = col1.selectbox("Instrument Used", df['Instrument'].unique()); analyst = col2.selectbox("Analyst", df['Analyst'].unique()); molecule = col3.selectbox("Molecule Type", df['Molecule_Type'].unique())
     if st.button("🔬 Predict Probable Root Cause", type="primary"):
-        # FIX: Create the dataframe with zeros directly to avoid FutureWarning from .fillna(0).
         input_data = pd.DataFrame(0, columns=feature_cols, index=[0])
         input_data[f'Instrument_{instrument}'] = 1
         input_data[f'Analyst_{analyst}'] = 1
@@ -367,13 +370,11 @@ def run_hplc_maintenance_model(df):
         st.info("This SHAP plot shows which factors are pushing the risk score higher (red) or lower (blue). The size of the bar indicates the magnitude of the factor's impact.")
         explainer = shap.TreeExplainer(model)
         
-        # FIX: For binary classification with this SHAP/Scikit-learn version, TreeExplainer
-        # returns a single array of shap_values and a single expected_value.
-        # Removed the incorrect `[1]` indexing that caused an IndexError.
-        shap_values = explainer.shap_values(input_df)
+        # FIX: Ensure shap_values is a 1D array for a single prediction to avoid a TypeError from force_plot.
+        shap_values = explainer.shap_values(input_df)[0]
         expected_value = explainer.expected_value
         
-        st_shap(shap.force_plot(expected_value, shap_values, input_df), height=150)
+        st_shap(shap.force_plot(expected_value, shap_values, input_df.iloc[0]), height=150)
 
     st.warning("**Actionable Insight:** The model predicts a very high probability that HPLC-01 requires preventative maintenance. The SHAP analysis reveals that the high number of **Run Hours** and **Pressure Spikes** are the primary drivers of this risk score. **Decision:** Schedule HPLC-01 for maintenance this week, prioritizing it over other instruments with lower risk scores to prevent an unexpected failure during a critical run.")
 
