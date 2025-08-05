@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v10.5 - Final, Fully Debugged & Robust Version
+# v10.6 - Final, Fully Debugged & API-Compatible Version
 # ======================================================================================
 
 import streamlit as st
@@ -368,12 +368,11 @@ def run_hplc_maintenance_model(df):
         st.info("This SHAP plot shows which factors are pushing the risk score higher (red) or lower (blue). The size of the bar indicates the magnitude of the factor's impact.")
         explainer = shap.TreeExplainer(model)
         
-        # FIX: Use the more robust SHAP object-oriented pattern to avoid TypeErrors.
-        # This creates an Explanation object that bundles all necessary components.
-        shap_explanation = explainer(input_df)
+        # FIX: Revert to the explicit, multi-argument `force_plot` call to match the older SHAP API.
+        expected_value = explainer.expected_value
+        shap_values = explainer.shap_values(input_df)[0] # Ensure shap_values is 1D for a single instance
         
-        # Pass the first (and only) explanation object from the batch to the force_plot.
-        st_shap(shap.force_plot(shap_explanation[0]), height=150)
+        st_shap(shap.force_plot(expected_value, shap_values, input_df.iloc[0]), height=150)
 
     st.warning("**Actionable Insight:** The model predicts a very high probability that HPLC-01 requires preventative maintenance. The SHAP analysis reveals that the high number of **Run Hours** and **Pressure Spikes** are the primary drivers of this risk score. **Decision:** Schedule HPLC-01 for maintenance this week, prioritizing it over other instruments with lower risk scores to prevent an unexpected failure during a critical run.")
 
