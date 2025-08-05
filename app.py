@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v13.2 - Final, Fully Restored & Enhanced Version
+# v13.3 - Final, Numerically Stable & Complete Version
 # ======================================================================================
 
 import streamlit as st
@@ -158,8 +158,19 @@ def generate_master_data():
     zone_data = np.random.normal(20, 0.5, 25); zone_data[15:] -= 0.4; zone_df = pd.DataFrame({'Seal_Strength': zone_data, 'Operator': np.random.choice(['Op-A', 'Op-B'], 25)})
     imr_data = np.random.normal(99.5, 0.1, 100); imr_data[60:68] -= 0.2; imr_data[80:] -= 0.25; imr_df = pd.DataFrame({'Purity': imr_data, 'Date': pd.to_datetime(pd.date_range(start='2023-01-01', periods=100, freq='D'))})
     cpk_data = np.random.normal(50.5, 0.25, 150); cpk_df = pd.DataFrame({'Titer': cpk_data})
-    mean_vec = [95, 1.0e13]; std_devs = [1.5, 0.1e13]; correlation = 0.7; cov_mat = [[std_devs[0]**2, correlation * std_devs[0] * std_devs[1]], [correlation * std_devs[0] * std_devs[1], std_devs[1]**2]]
-    t2_data_in = np.random.multivariate_normal(mean_vec, np.array(cov_mat), 30); t2_outlier = [97.5, 0.9e13]; t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]]); t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer_vg_mL'])
+    
+    # SME FIX: The extreme difference in magnitude between variables caused numerical instability.
+    # The Titer data is scaled to a more realistic and numerically stable range.
+    mean_vec = [95, 10.0]
+    std_devs = [1.5, 1.5] 
+    correlation = 0.7
+    cov_mat = [[std_devs[0]**2, correlation * std_devs[0] * std_devs[1]],
+               [correlation * std_devs[0] * std_devs[1], std_devs[1]**2]]
+    t2_data_in = np.random.multivariate_normal(mean_vec, np.array(cov_mat), 30)
+    t2_outlier = [97.5, 7.5]; # Outlier adjusted to new scale
+    t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]])
+    t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer (e12 vg/mL)']) # Column name updated for clarity
+    
     p_data = {'Month': pd.to_datetime(pd.date_range(start='2023-01-01', periods=12, freq='ME')), 'SSTs_Run': np.random.randint(40, 60, 12)}; p_df = pd.DataFrame(p_data); p_df['SSTs_Failed'] = np.random.binomial(n=p_df['SSTs_Run'], p=0.05); p_df.loc[9, 'SSTs_Failed'] = 8
     np_df = pd.DataFrame({'Week': range(1, 21), 'Batches_Sampled': 50, 'Defective_Vials': np.random.binomial(n=50, p=0.04, size=20)}); np_df.loc[12, 'Defective_Vials'] = 7
     c_df = pd.DataFrame({'Week': range(1, 21), 'Contaminants_per_Plate': np.random.poisson(lam=3, size=20)}); c_df.loc[15, 'Contaminants_per_Plate'] = 9
@@ -297,6 +308,7 @@ def plot_zone_chart(df):
     fig.update_layout(title="<b>Zone Chart for Seal Strength with Sensitizing Rules</b>", yaxis_title="Seal Strength (N)", xaxis_title="Sample Number")
     st.plotly_chart(fig, use_container_width=True)
     st.warning("**Actionable Insight:** Although no single point is out of control, the Zone Chart detected a run of 8 consecutive points below the center line. This non-random pattern indicates a systematic process shift. **Decision:** This early warning triggers an investigation into potential causes like equipment wear or material changes during the next planned maintenance cycle.")
+
 def plot_i_mr_chart(df):
     render_full_chart_briefing(context="Monitoring individual measurements where assessing both process mean and variability is critical.", significance="This enhanced I-MR chart automatically applies and visualizes Nelson Rules, detecting non-random patterns (like trends or shifts) within control limits that would be missed by simple UCL/LCL breaches, providing an earlier warning of process instability.", regulatory="Goes beyond basic SPC to demonstrate a mature process monitoring program. Using sensitizing rules like Nelson Rules is a best practice for Continued Process Verification (**FDA Guidance**) and demonstrates a proactive approach to quality management (**ICH Q10**).")
     i_data = df['Purity']
@@ -360,8 +372,7 @@ def plot_cpk_analysis(df):
         st.success(f"**Actionable Insight:** The process is highly capable against both specification (Cpk={cpk:.2f}) and internal guard band (Cpk-GB={cpk_gb:.2f}) limits. **Decision:** The process is robust and approved for routine manufacturing. Monitoring can continue at a standard frequency.")
     else:
         st.error(f"**Actionable Insight:** The Cpk of {cpk:.2f} is below the required 1.33. The process is not capable. **Decision:** Halt process validation. A full root cause analysis is required to re-develop the process to reduce variability or re-center the mean.")
-
-def plot_hotelling_t2_chart(df):
+    def plot_hotelling_t2_chart(df):
     render_full_chart_briefing(context="Simultaneously monitoring two correlated CQAs from a bioreactor run.", significance="This advanced example includes a **Contribution Plot**, a critical diagnostic tool. When the T² chart signals an anomaly, the contribution plot immediately identifies *which* variable was most responsible for the out-of-control signal, directing the investigation efficiently.", regulatory="Using multivariate control charts demonstrates a mature understanding of process interactions (**ICH Q8**). Including contribution plots shows a sophisticated and systematic approach to investigations (**21 CFR 211.192**), moving beyond guessing to data-driven diagnosis.")
     data = df.values
     mean_vec = data.mean(axis=0)
@@ -386,7 +397,7 @@ def plot_hotelling_t2_chart(df):
     with col2:
         contributions = (data[anomaly_idx] - mean_vec) * (inv_cov_mat @ (data[anomaly_idx] - mean_vec))
         contrib_df = pd.DataFrame({'Variable': df.columns, 'Contribution': contributions})
-        fig_contrib = px.bar(contrib_df, x='Variable', y='Contribution', title=f"<b>Contribution to Anomaly at Batch {anomaly_idx}</b>", color='Variable', color_discrete_map={'Purity_Pct': PRIMARY_COLOR, 'Titer_vg_mL': WARNING_AMBER})
+        fig_contrib = px.bar(contrib_df, x='Variable', y='Contribution', title=f"<b>Contribution to Anomaly at Batch {anomaly_idx}</b>", color='Variable', color_discrete_map={'Purity_Pct': PRIMARY_COLOR, 'Titer (e12 vg/mL)': WARNING_AMBER})
         st.plotly_chart(fig_contrib, use_container_width=True)
     st.error(f"**Actionable Insight:** The T² chart identified a multivariate anomaly at Batch #{anomaly_idx}. While two separate charts might have missed it, the T² chart detected the unusual combination of parameters. The contribution plot clearly shows that the **{contrib_df.loc[contrib_df['Contribution'].idxmax(), 'Variable']}** was the primary driver of the deviation. **Decision:** Quarantine Batch #{anomaly_idx}. The investigation should immediately focus on the root causes related to the anomalous variable.")
 
@@ -760,4 +771,4 @@ elif selection == "Predictive Operations & Diagnostics": page_function(oos_df, b
 elif selection == "Advanced Statistical Toolkit": page_function(lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df)
 
 st.sidebar.markdown("---"); st.sidebar.markdown("### Role Focus"); st.sidebar.info("This portfolio is for an **Associate Director, Analytical Development Operations** role, demonstrating leadership in building high-throughput testing functions, managing the method lifecycle, and applying advanced statistical methods."); st.sidebar.markdown("---"); st.sidebar.markdown("### Key Regulatory & Quality Frameworks")
-with st.sidebar.expander("View Applicable Guidelines", expanded=False): st.markdown("- **ICH Q1E, Q2, Q8, Q9, Q10, Q12, Q14**\n- **21 CFR Parts 11, 211, 820.30**\n- **EudraLex Vol. 4, Annex 1 & 15**\n- **ISO 17025, ISO 13485**")    
+with st.sidebar.expander("View Applicable Guidelines", expanded=False): st.markdown("- **ICH Q1E, Q2, Q8, Q9, Q10, Q12, Q14**\n- **21 CFR Parts 11, 211, 820.30**\n- **EudraLex Vol. 4, Annex 1 & 15**\n- **ISO 17025, ISO 13485**")
