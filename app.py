@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v11.2 - Fully Restored & Robust Version
+# v11.2 - Fully Restored & Robust Version (SME Corrected)
 # ======================================================================================
 
 import streamlit as st
@@ -142,105 +142,201 @@ def generate_master_data():
 ## --- STATISTICAL TOOLKIT FUNCTIONS (ENRICHED) ---
 def plot_levey_jennings(df):
     render_full_chart_briefing(context="Daily QC analysis of a certified reference material on an HPLC system to ensure system performance.", significance="Detects shifts or increased variability in an analytical instrument's performance, ensuring the validity of daily sample results. It distinguishes between random error (a single outlier) and systematic error (a developing bias).", regulatory="Directly supports **21 CFR 211.160** (General requirements for laboratory controls) and **ISO 17025** by providing documented evidence of the ongoing validity of test methods. Westgard rules are an industry best practice for clinical and QC labs.")
-    mean, sd = 100.0, 2.0
+    
+    # SME FIX: Replaced hardcoded mean/sd with dynamic calculation from a stable baseline period (e.g., first 20 points).
+    baseline_points = 20
+    baseline_data = df['Value'].iloc[:baseline_points]
+    mean, sd = baseline_data.mean(), baseline_data.std(ddof=1)
+    
     fig = go.Figure()
-    fig.add_hrect(y0=mean - 1.5*sd, y1=mean + 1.5*sd, line_width=0, fillcolor='rgba(255, 152, 0, 0.1)', layer="below", name='±1.5s Guard Band')
+    # SME FIX: Reordered hrects to ensure correct layering on the plot.
     fig.add_hrect(y0=mean - 3*sd, y1=mean + 3*sd, line_width=0, fillcolor='rgba(255, 0, 0, 0.1)', layer="below", name='±3s UCL/LCL')
     fig.add_hrect(y0=mean - 2*sd, y1=mean + 2*sd, line_width=0, fillcolor='rgba(255, 193, 7, 0.2)', layer="below", name='±2s Warning')
-    fig.add_trace(go.Scatter(y=df['Value'], mode='lines+markers', name='QC Value', line=dict(color=PRIMARY_COLOR), customdata=df['Analyst'], hovertemplate='Value: %{y:.2f}<br>Analyst: %{customdata}<extra></extra>'))
-    fig.add_hline(y=mean, line_dash='solid', line_color=SUCCESS_GREEN, annotation_text="Mean")
-    fig.add_annotation(x=20, y=106.5, text="<b>1-3s Violation</b>", showarrow=True, arrowhead=2, ax=0, ay=-50, bgcolor=ERROR_RED, font=dict(color='white'))
-    fig.add_annotation(x=26, y=104.8, text="<b>2-2s Violation</b>", showarrow=True, arrowhead=2, ax=0, ay=50, bgcolor=WARNING_AMBER)
+    fig.add_hrect(y0=mean - 1.5*sd, y1=mean + 1.5*sd, line_width=0, fillcolor='rgba(76, 175, 80, 0.1)', layer="below", name='±1.5s Guard Band')
+    
+    fig.add_trace(go.Scatter(x=df.index, y=df['Value'], mode='lines+markers', name='QC Value', line=dict(color=PRIMARY_COLOR), customdata=df['Analyst'], hovertemplate='Run: %{x}<br>Value: %{y:.2f}<br>Analyst: %{customdata}<extra></extra>'))
+    fig.add_hline(y=mean, line_dash='solid', line_color=SUCCESS_GREEN, annotation_text=f"Mean ({mean:.2f})")
+
+    # SME FIX: Replaced hardcoded annotations with programmatic detection of Westgard rule violations.
+    violations_found = []
+    # Rule 1_3s: One point outside ±3s
+    violation_1_3s = df[np.abs(df['Value'] - mean) > 3 * sd]
+    if not violation_1_3s.empty:
+        idx = violation_1_3s.index[0]
+        fig.add_annotation(x=idx, y=df['Value'].loc[idx], text="<b>1-3s Violation</b>", showarrow=True, arrowhead=2, ax=0, ay=-50, bgcolor=ERROR_RED, font=dict(color='white'))
+        violations_found.append(f"1-3s failure at Run #{idx}")
+
+    # Rule 2_2s: Two consecutive points outside same ±2s
+    for i in range(1, len(df)):
+        if (df['Value'].iloc[i-1] > mean + 2*sd and df['Value'].iloc[i] > mean + 2*sd) or \
+           (df['Value'].iloc[i-1] < mean - 2*sd and df['Value'].iloc[i] < mean - 2*sd):
+            idx = i
+            fig.add_annotation(x=idx, y=df['Value'].loc[idx], text="<b>2-2s Violation</b>", showarrow=True, arrowhead=2, ax=0, ay=50, bgcolor=WARNING_AMBER)
+            violations_found.append(f"2-2s failure at Run #{idx}")
+            break # Annotate only the first occurrence for clarity
+
     fig.update_layout(title="<b>Levey-Jennings Chart with Guard Bands & Westgard Rules</b>", yaxis_title="Reference Material Recovery (%)", xaxis_title="Run Number")
     st.plotly_chart(fig, use_container_width=True)
-    st.error("**Actionable Insight:** The 1-3s violation is a definitive failure. The 2-2s violation, while inside the 3s limits, is a clear signal of systematic bias. The earlier points breaching the ±1.5s guard band could have served as an even earlier warning. **Decision:** Halt testing. Initiate a formal deviation to investigate the systematic bias. Quarantine all data generated since run #25.")
+    
+    # SME FIX: Dynamic insight text based on detected violations.
+    if violations_found:
+        st.error(f"**Actionable Insight:** Violations detected: {'; '.join(violations_found)}. The 1-3s violation is a definitive failure. The 2-2s violation is a clear signal of systematic bias. The earlier points breaching the ±1.5s guard band served as an early warning. **Decision:** Halt testing. Initiate a formal deviation to investigate the systematic bias. Quarantine all data generated since the start of the trend.")
+    else:
+        st.success("**Actionable Insight:** Process appears to be in a state of statistical control. **Decision:** Continue routine testing and monitoring.")
 
 def plot_ewma_chart(df):
     render_full_chart_briefing(context="Monitoring a critical quality attribute (CQA) where early detection of small drifts is paramount.", significance="Highly sensitive to small, persistent process drifts. This example shows an emerging drift, a corrective action, and the subsequent return to a state of control, demonstrating a full quality feedback loop.", regulatory="Supports Continued Process Verification (**FDA Process Validation Guidance**) by providing evidence of both process monitoring and the effectiveness of corrective actions. This is a key principle of **ICH Q10**.")
     lam = 0.2
-    pre_intervention = df.iloc[:25]
-    post_intervention = df.iloc[25:]
-    mean_pre, sd_pre = pre_intervention['Impurity'].iloc[:15].mean(), pre_intervention['Impurity'].iloc[:15].std()
-    df['EWMA'] = np.nan
-    df.loc[:24, 'EWMA'] = pre_intervention['Impurity'].ewm(span=(2/lam)-1, adjust=False).mean()
-    df.loc[25:, 'EWMA'] = post_intervention['Impurity'].ewm(span=(2/lam)-1, adjust=False).mean()
+    baseline_points = 15
+    # SME FIX: Establish baseline parameters from a stable period.
+    mean_pre, sd_pre = df['Impurity'].iloc[:baseline_points].mean(), df['Impurity'].iloc[:baseline_points].std(ddof=1)
+    
+    # SME FIX: Corrected EWMA calculation. It should be a single, continuous series.
+    df['EWMA'] = df['Impurity'].ewm(span=(2/lam)-1, adjust=False).mean()
 
-    ucl = mean_pre + 3 * sd_pre
+    # SME FIX: CRITICAL BUG - Replaced incorrect Shewhart limits with the proper, tighter asymptotic EWMA limits.
+    limit_factor = 3 * sd_pre * math.sqrt(lam / (2 - lam))
+    ucl = mean_pre + limit_factor
+    lcl = mean_pre - limit_factor
+
     fig = go.Figure();
     fig.add_trace(go.Scatter(x=df.index, y=df['Impurity'], mode='markers', name='Individual Batch', marker_color=NEUTRAL_GREY, customdata=df['Batch'], hovertemplate='Batch: %{customdata}<br>Impurity: %{y:.3f}%<extra></extra>'));
     fig.add_trace(go.Scatter(x=df.index, y=df['EWMA'], mode='lines', name='EWMA', line=dict(color=PRIMARY_COLOR, width=3)));
-    fig.add_hline(y=ucl, line_dash='dash', line_color=ERROR_RED, annotation_text="Initial UCL")
+    fig.add_hline(y=ucl, line_dash='dash', line_color=ERROR_RED, annotation_text="UCL")
+    fig.add_hline(y=lcl, line_dash='dash', line_color=ERROR_RED, annotation_text="LCL")
+    fig.add_hline(y=mean_pre, line_dash='dot', line_color=SUCCESS_GREEN, annotation_text="Center Line")
     fig.add_vline(x=25, line_dash='dot', line_color=DARK_GREY, annotation_text="Process Intervention")
-    violation_idx = df[df['EWMA'] > ucl].first_valid_index();
-    if violation_idx:
+    
+    violation_idx = df[df['EWMA'] > ucl].first_valid_index()
+    if violation_idx is not None:
         fig.add_annotation(x=violation_idx, y=df['EWMA'][violation_idx], text="<b>Drift Signal</b>", showarrow=True, arrowhead=2, ax=0, ay=-40, bgcolor=ERROR_RED, font=dict(color='white'))
+    
     fig.update_layout(title="<b>EWMA Chart with Process Intervention & Reset</b>", yaxis_title="Impurity Level (%)", xaxis_title="Batch Number")
     st.plotly_chart(fig, use_container_width=True)
-    st.success(f"**Actionable Insight:** The EWMA chart signaled a process drift at Batch #{violation_idx}. A planned intervention (e.g., column repacking) was performed at Batch #25. The post-intervention EWMA shows the process has returned to its original state of control. **Decision:** The corrective action was successful. Continue monitoring under the established control limits.")
+    
+    if violation_idx is not None:
+        st.success(f"**Actionable Insight:** The EWMA chart correctly signaled a process drift at Batch #{violation_idx}. A planned intervention (e.g., column repacking) was performed at Batch #25. The post-intervention EWMA shows the process has returned to its original state of control. **Decision:** The corrective action was successful. Continue monitoring under the established control limits.")
+    else:
+        st.info("**Actionable Insight:** No significant process drift detected by the EWMA chart.")
 
 def plot_cusum_chart(df):
-    render_full_chart_briefing(context="Monitoring a high-speed, high-cost process parameter where rapid shift detection is critical.", significance="CUSUM charts are the fastest at detecting small, sustained shifts. This advanced version shows a two-sided chart with a V-Mask, the formal graphical tool for signal detection, providing a more robust and statistically sound decision-making framework.", regulatory="Demonstrates an advanced and mature quality system. The use of a V-Mask is a highly technical SPC method that shows a deep commitment to rapid response and process control, aligning with **ICH Q9** risk-based principles.")
-    target = 10.0; sd = 0.05; k = 0.5 * sd; h = 5 * sd
-    df['C+'] = 0.0; df['C-'] = 0.0
-    for i in range(1, len(df)):
-        df.loc[i, 'C+'] = max(0, df.loc[i, 'Fill_Volume'] - (target + k) + df.loc[i-1, 'C+'])
-        df.loc[i, 'C-'] = max(0, (target - k) - df.loc[i, 'Fill_Volume'] + df.loc[i-1, 'C-'])
+    render_full_chart_briefing(context="Monitoring a high-speed, high-cost process parameter where rapid shift detection is critical.", significance="CUSUM charts are the fastest at detecting small, sustained shifts. This chart uses the tabular method with a Decision Interval (H), a formal and robust method for signal detection.", regulatory="Demonstrates an advanced and mature quality system. The use of tabular CUSUM is a highly technical SPC method that shows a deep commitment to rapid response and process control, aligning with **ICH Q9** risk-based principles.")
+    
+    # SME FIX: Replaced hardcoded parameters with dynamic calculation from a baseline period.
+    baseline_points = 25
+    baseline_data = df['Fill_Volume'].iloc[:baseline_points]
+    target, sd = baseline_data.mean(), baseline_data.std(ddof=1)
+    k = 0.5 * sd
+    h = 5 * sd
+    
+    # SME FIX: Replaced inefficient row-by-row .loc loop with a more performant approach.
+    c_plus_list, c_minus_list = [], []
+    c_plus_val, c_minus_val = 0.0, 0.0
+    for val in df['Fill_Volume']:
+        c_plus_val = max(0, val - (target + k) + c_plus_val)
+        c_minus_val = max(0, (target - k) - val + c_minus_val)
+        c_plus_list.append(c_plus_val)
+        c_minus_list.append(c_minus_val)
+    df['C+'] = c_plus_list
+    df['C-'] = c_minus_list
+    
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, subplot_titles=("CUSUM for Upward Shift (C+)", "CUSUM for Downward Shift (C-)"))
     fig.add_trace(go.Scatter(y=df['C+'], name='CUSUM High (C+)', mode='lines+markers', line=dict(color=PRIMARY_COLOR)), row=1, col=1)
-    fig.add_hline(y=h, line_dash='dash', line_color=ERROR_RED, annotation_text="H", row=1, col=1)
+    fig.add_hline(y=h, line_dash='dash', line_color=ERROR_RED, annotation_text=f"H ({h:.2f})", row=1, col=1)
     fig.add_trace(go.Scatter(y=df['C-'], name='CUSUM Low (C-)', mode='lines+markers', line=dict(color=WARNING_AMBER)), row=2, col=1)
-    fig.add_hline(y=h, line_dash='dash', line_color=ERROR_RED, annotation_text="H", row=2, col=1)
+    fig.add_hline(y=h, line_dash='dash', line_color=ERROR_RED, annotation_text=f"H ({h:.2f})", row=2, col=1)
+    
     violation_idx = df[df['C-'] > h].first_valid_index()
-    if violation_idx:
-        fig.add_annotation(x=violation_idx, y=df['C-'][violation_idx], text="<b>CUSUM Signal!</b>", showarrow=False, bgcolor=ERROR_RED, font=dict(color='white'), row=2, col=1)
-        lead_distance = 10; v_mask_y = df['C-'][violation_idx]
-        v_mask_upper_y = v_mask_y + k * lead_distance; v_mask_lower_y = v_mask_y - k * lead_distance
-        fig.add_shape(type="line", x0=violation_idx, y0=v_mask_y, x1=violation_idx-lead_distance, y1=v_mask_upper_y, line=dict(color=DARK_GREY, width=2, dash="dot"), row=2, col=1)
-        fig.add_shape(type="line", x0=violation_idx, y0=v_mask_y, x1=violation_idx-lead_distance, y1=v_mask_lower_y, line=dict(color=DARK_GREY, width=2, dash="dot"), row=2, col=1)
-    fig.update_layout(height=500, title_text="<b>Two-Sided CUSUM Chart with V-Mask</b>", showlegend=False)
+    if violation_idx is not None:
+        fig.add_annotation(x=violation_idx, y=df['C-'][violation_idx], text="<b>CUSUM Signal!</b>", showarrow=False, bgcolor=ERROR_RED, font=dict(color='white'), yshift=10, row=2, col=1)
+    
+    # SME FIX: Removed the confusing V-Mask plot. The decision interval 'H' is the standard for tabular CUSUM.
+    fig.update_layout(height=500, title_text="<b>Two-Sided Tabular CUSUM Chart</b>", showlegend=False)
+    fig.update_yaxes(title_text="CUSUM Value", row=1, col=1)
+    fig.update_yaxes(title_text="CUSUM Value", row=2, col=1)
+    fig.update_xaxes(title_text="Sample Number", row=2, col=1)
     st.plotly_chart(fig, use_container_width=True)
-    st.success(f"**Actionable Insight:** The two-sided CUSUM chart detected a downward shift at sample #{violation_idx}. The V-Mask, placed at the signal point, graphically confirms the out-of-control condition as prior data points cross its arms. **Decision:** The filling line was halted. The rapid CUSUM detection minimized the number of non-conforming units produced.")
+
+    # SME FIX: Updated insight to reflect the tabular CUSUM methodology.
+    if violation_idx is not None:
+        st.success(f"**Actionable Insight:** The two-sided CUSUM chart detected a downward shift at sample #{violation_idx}. The C- statistic crossed the decision interval H, providing a statistically sound signal of a process change. **Decision:** The filling line was halted. The rapid CUSUM detection minimized the number of non-conforming units produced.")
+    else:
+        st.info("**Actionable Insight:** No significant process shift detected by the CUSUM chart.")
 
 def plot_zone_chart(df):
     render_full_chart_briefing(context="Monitoring the stability of a mature, well-understood, and highly capable analytical method, like a validated potency assay.", significance="Detects unnatural, non-random patterns *within* the control limits. It provides a much earlier warning of potential process drift than a standard chart that only alarms on UCL/LCL breaches, allowing for proactive investigation.", regulatory="Demonstrates a sophisticated level of process understanding and monitoring, aligning with the principles of **ICH Q14** (Analytical Procedure Development) and Continued Process Verification. The use of sensitizing rules (e.g., Nelson, Westgard) is a hallmark of a mature quality system.")
-    mean, sd = 20, 0.5; fig = go.Figure()
+    
+    # SME FIX: Replaced hardcoded mean/sd with dynamic calculation.
+    mean, sd = df['Seal_Strength'].mean(), df['Seal_Strength'].std(ddof=1)
+    fig = go.Figure()
+
     zones = {'Zone A (Upper)': [mean + 2*sd, mean + 3*sd], 'Zone B (Upper)': [mean + 1*sd, mean + 2*sd], 'Zone C (Upper)': [mean, mean + 1*sd], 'Zone C (Lower)': [mean - 1*sd, mean], 'Zone B (Lower)': [mean - 2*sd, mean - 1*sd], 'Zone A (Lower)': [mean - 3*sd, mean - 2*sd]}
-    colors = {'Zone A (Upper)': 'rgba(255, 193, 7, 0.2)', 'Zone B (Upper)': 'rgba(76, 175, 80, 0.2)', 'Zone C (Upper)': 'rgba(76, 175, 80, 0.2)', 'Zone C (Lower)': 'rgba(76, 175, 80, 0.2)', 'Zone B (Lower)': 'rgba(255, 193, 7, 0.2)', 'Zone A (Lower)': 'rgba(255, 193, 7, 0.2)'}
-    for name, y_range in zones.items(): fig.add_hrect(y0=y_range[0], y1=y_range[1], line_width=0, fillcolor=colors[name], annotation_text=name.split(' ')[1], annotation_position="top left", layer="below")
-    fig.add_trace(go.Scatter(y=df['Seal_Strength'], mode='lines+markers', name='Strength', line=dict(color=PRIMARY_COLOR), customdata=df['Operator'], hovertemplate='Strength: %{y:.2f} N<br>Operator: %{customdata}<extra></extra>')); fig.add_hline(y=mean, line_color='black')
-    fig.add_annotation(x=18, y=mean - 0.7, text="<b>Rule Violation!</b><br>8 consecutive points<br>on one side of mean.", showarrow=False, bgcolor=WARNING_AMBER, borderpad=4)
-    fig.update_layout(title="<b>Zone Chart for Potency Assay Control with Sensitizing Rules</b>", yaxis_title="Relative Potency (%)", xaxis_title="Assay Run")
+    colors = {'Zone A': 'rgba(255, 193, 7, 0.2)', 'Zone B': 'rgba(76, 175, 80, 0.2)', 'Zone C': 'rgba(76, 175, 80, 0.1)'}
+    for name, y_range in zones.items():
+        zone_letter = name.split(' ')[1]
+        fig.add_hrect(y0=y_range[0], y1=y_range[1], line_width=0, fillcolor=colors[zone_letter], annotation_text=f"Zone {zone_letter}", annotation_position="top left", layer="below")
+    
+    fig.add_trace(go.Scatter(y=df['Seal_Strength'], mode='lines+markers', name='Strength', line=dict(color=PRIMARY_COLOR), customdata=df['Operator'], hovertemplate='Strength: %{y:.2f} N<br>Operator: %{customdata}<extra></extra>'))
+    fig.add_hline(y=mean, line_color='black')
+    
+    # SME FIX: Replaced hardcoded annotation with programmatic detection of Nelson Rule #2.
+    for i in range(8, len(df)):
+        if all(df['Seal_Strength'][i-8:i] > mean) or all(df['Seal_Strength'][i-8:i] < mean):
+            fig.add_annotation(x=i-4, y=df['Seal_Strength'][i-4], text="<b>Rule Violation!</b><br>8 consecutive points<br>on one side of mean.", showarrow=False, bgcolor=WARNING_AMBER, borderpad=4)
+            break
+            
+    # SME FIX: BUG - Corrected titles to match the data being plotted ('Seal_Strength' not 'Potency').
+    fig.update_layout(title="<b>Zone Chart for Seal Strength with Sensitizing Rules</b>", yaxis_title="Seal Strength (N)", xaxis_title="Sample Number")
     st.plotly_chart(fig, use_container_width=True)
-    st.warning("**Actionable Insight:** Although no single point is out of control, the Zone Chart detected a run of 8 consecutive points below the center line. This non-random pattern indicates a systematic process shift. **Decision:** This early warning triggers an investigation into the stability of the cell bank or critical reagents used in the assay during the next planned maintenance cycle.")
+    st.warning("**Actionable Insight:** Although no single point is out of control, the Zone Chart detected a run of 8 consecutive points below the center line. This non-random pattern indicates a systematic process shift. **Decision:** This early warning triggers an investigation into potential causes like equipment wear or material changes during the next planned maintenance cycle.")
 
 def plot_i_mr_chart(df):
     render_full_chart_briefing(context="Monitoring individual measurements where assessing both process mean and variability is critical.", significance="This enhanced I-MR chart automatically applies and visualizes Nelson Rules, detecting non-random patterns (like trends or shifts) within control limits that would be missed by simple UCL/LCL breaches, providing an earlier warning of process instability.", regulatory="Goes beyond basic SPC to demonstrate a mature process monitoring program. Using sensitizing rules like Nelson Rules is a best practice for Continued Process Verification (**FDA Guidance**) and demonstrates a proactive approach to quality management (**ICH Q10**).")
-    i_data = df['Purity']; i_mean = i_data.mean(); mr = abs(i_data.diff()); mr_mean = mr.mean();
-    i_ucl, i_lcl = i_mean + 2.66 * mr_mean, i_mean - 2.66 * mr_mean; mr_ucl = 3.267 * mr_mean
+    i_data = df['Purity']
+    i_mean = i_data.mean()
+    mr = abs(i_data.diff())
+    mr_mean = mr.mean()
+
+    i_ucl, i_lcl = i_mean + 2.66 * mr_mean, i_mean - 2.66 * mr_mean
+    mr_ucl = 3.267 * mr_mean
+    
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1, subplot_titles=("<b>Individuals (I) Chart with Nelson Rules</b>", "<b>Moving Range (MR) Chart</b>"))
     fig.add_trace(go.Scatter(x=df['Date'], y=i_data, name='Purity', mode='lines+markers', marker_color=PRIMARY_COLOR), row=1, col=1);
     fig.add_hline(y=i_mean, line_dash="dash", line_color=SUCCESS_GREEN, row=1, col=1, annotation_text="Mean");
     fig.add_hline(y=i_ucl, line_dash="dot", line_color=ERROR_RED, row=1, col=1, annotation_text="UCL");
     fig.add_hline(y=i_lcl, line_dash="dot", line_color=ERROR_RED, row=1, col=1, annotation_text="LCL");
-    s = (i_data - i_mean) / i_data.std()
-    for j in range(8, len(s)):
-        if all(s[j-8:j] < 0) or all(s[j-8:j] > 0):
-            fig.add_annotation(x=df['Date'].iloc[j-4], y=i_data.iloc[j-4], text="<b>Nelson Rule 2</b><br>8 points one side", showarrow=True, bgcolor=WARNING_AMBER, row=1, col=1); break
+    
+    # SME FIX: CRITICAL BUG - Replaced incorrect sigma estimate with the robust `mr_mean / d2` method.
+    sigma_hat = mr_mean / 1.128 # d2 for n=2 is 1.128
+    if sigma_hat > 0:
+        s = (i_data - i_mean) / sigma_hat
+        # SME FIX: Corrected rule from 8 to 9 points to match standard Nelson Rule #2.
+        for j in range(9, len(s)):
+            if all(s[j-9:j] < 0) or all(s[j-9:j] > 0):
+                fig.add_annotation(x=df['Date'].iloc[j-4], y=i_data.iloc[j-4], text="<b>Nelson Rule 2</b><br>9 points one side", showarrow=True, bgcolor=WARNING_AMBER, row=1, col=1); break
+                
     fig.add_trace(go.Scatter(x=df['Date'], y=mr, name='Moving Range', mode='lines+markers', marker_color=WARNING_AMBER), row=2, col=1);
     fig.add_hline(y=mr_mean, line_dash="dash", line_color=SUCCESS_GREEN, row=2, col=1, annotation_text="Mean");
     fig.add_hline(y=mr_ucl, line_dash="dot", line_color=ERROR_RED, row=2, col=1, annotation_text="UCL");
     fig.update_layout(height=600, showlegend=False, title_text="<b>I-MR Chart for Reference Standard Purity</b>")
     st.plotly_chart(fig, use_container_width=True)
-    st.warning("**Actionable Insight:** Even before any points breached the control limits, the I-chart detected a violation of Nelson Rule #2 (8 consecutive points below the mean), indicating a non-random downward shift. This early warning confirms the reference standard is degrading. **Decision:** Quarantine the current standard and qualify a new one immediately. This proactive measure prevents the generation of invalid data.")
+    st.warning("**Actionable Insight:** Even before any points breached the control limits, the I-chart detected a violation of Nelson Rule #2 (9 consecutive points below the mean), indicating a non-random downward shift. This early warning confirms the reference standard is degrading. **Decision:** Quarantine the current standard and qualify a new one immediately. This proactive measure prevents the generation of invalid data.")
 
 def plot_cpk_analysis(df):
     render_full_chart_briefing(context="Assessing if a validated manufacturing process can reliably meet not just its official specifications, but also its tighter internal 'guard band' limits.", significance="Introduces **Guard-Banded Cpk (Cpk-GB)**, a critical internal metric that measures process capability against tighter, action-oriented limits. This provides an early warning if a process is drifting towards an edge of the specification, even if it's still officially 'in-spec'.", regulatory="Demonstrates a mature, risk-based approach to process control (**ICH Q9**). Maintaining a high Cpk-GB ensures the process stays well within the 'safe' operating space defined in the Design Space (**ICH Q8**), reducing the risk of OOS results.")
-    data = df['Titer']; LSL, USL, target = 48.0, 52.0, 50.0;
+    data = df['Titer']
+    LSL, USL, target = 48.0, 52.0, 50.0
     GBL, GBU = 49.0, 51.0
     mu, std = data.mean(), data.std(ddof=1)
-    cpk, cp = 0,0
-    if std > 0: cpk = min((USL - mu) / (3 * std), (mu - LSL) / (3 * std)); cp = (USL - LSL) / (6*std)
-    cpk_gb = min((GBU - mu) / (3 * std), (mu - GBL) / (3 * std))
+    
+    # SME FIX: Handle the edge case of zero standard deviation to prevent division-by-zero errors.
+    if std > 1e-9:
+        cpk = min((USL - mu) / (3 * std), (mu - LSL) / (3 * std))
+        cp = (USL - LSL) / (6 * std)
+        cpk_gb = min((GBU - mu) / (3 * std), (mu - GBL) / (3 * std))
+    else:
+        cpk, cp, cpk_gb = float('inf'), float('inf'), float('inf')
+
     col1, col2 = st.columns([2,1])
     with col1:
         fig = go.Figure();
@@ -269,16 +365,27 @@ def plot_cpk_analysis(df):
 
 def plot_hotelling_t2_chart(df):
     render_full_chart_briefing(context="Simultaneously monitoring two correlated CQAs from a bioreactor run.", significance="This advanced example includes a **Contribution Plot**, a critical diagnostic tool. When the T² chart signals an anomaly, the contribution plot immediately identifies *which* variable was most responsible for the out-of-control signal, directing the investigation efficiently.", regulatory="Using multivariate control charts demonstrates a mature understanding of process interactions (**ICH Q8**). Including contribution plots shows a sophisticated and systematic approach to investigations (**21 CFR 211.192**), moving beyond guessing to data-driven diagnosis.")
-    data = df.values; mean_vec = data.mean(axis=0); inv_cov_mat = np.linalg.inv(np.cov(data, rowvar=False))
+    data = df.values
+    mean_vec = data.mean(axis=0)
+    inv_cov_mat = np.linalg.inv(np.cov(data, rowvar=False))
     t_squared_values = np.array([ (x - mean_vec).T @ inv_cov_mat @ (x - mean_vec) for x in data ])
-    ucl = stats.f.ppf(0.99, 2, len(data)-1) * (2 * (len(data)-1) * (len(data)+1)) / (len(data) * (len(data)-2))
+    
+    # SME FIX: CRITICAL BUG - Replaced incorrect UCL formula with the statistically correct one for Phase II charts.
+    p = data.shape[1] # number of variables
+    m = data.shape[0] # number of observations
+    alpha = 0.99 
+    f_critical_value = stats.f.ppf(alpha, p, m - p)
+    ucl_factor = (p * (m - 1) * (m + 1)) / (m * (m - p))
+    ucl = ucl_factor * f_critical_value
+
     anomaly_idx = np.argmax(t_squared_values)
     col1, col2 = st.columns(2)
     with col1:
         fig_t2 = go.Figure();
         fig_t2.add_trace(go.Scatter(y=t_squared_values, mode='lines+markers', name='T² Value', line=dict(color=PRIMARY_COLOR)));
-        fig_t2.add_hline(y=ucl, line_dash='dash', line_color=ERROR_RED, annotation_text="UCL (99%)");
-        fig_t2.add_annotation(x=anomaly_idx, y=t_squared_values[anomaly_idx], text="<b>Multivariate Anomaly</b>", showarrow=True, bgcolor=ERROR_RED, font=dict(color='white'))
+        fig_t2.add_hline(y=ucl, line_dash='dash', line_color=ERROR_RED, annotation_text=f"UCL ({alpha*100}%)");
+        if t_squared_values[anomaly_idx] > ucl:
+            fig_t2.add_annotation(x=anomaly_idx, y=t_squared_values[anomaly_idx], text="<b>Multivariate Anomaly</b>", showarrow=True, bgcolor=ERROR_RED, font=dict(color='white'))
         fig_t2.update_layout(title="<b>Hotelling's T² Chart</b>", yaxis_title="T² Statistic", xaxis_title="Batch Number")
         st.plotly_chart(fig_t2, use_container_width=True)
     with col2:
@@ -290,8 +397,9 @@ def plot_hotelling_t2_chart(df):
 
 def plot_p_chart(df):
     render_full_chart_briefing(context="Monitoring the proportion of failures when the sample size varies per period (e.g., monthly SST failures).", significance="This p-chart is enhanced with **Wilson Score Intervals** for each point, providing a more accurate representation of uncertainty than standard Shewhart chart limits, especially when failure rates are low. This prevents overreaction to random noise.", regulatory="Demonstrates a statistically superior method for handling proportional data, aligning with expectations for robust data analysis in quality systems (**21 CFR 211.165(d)**) and showing a deeper understanding of statistical theory.")
-    df['proportion'] = df['SSTs_Failed'] / df['SSTs_Run']; p_bar = df['SSTs_Failed'].sum() / df['SSTs_Run'].sum();
-    df['UCL'] = p_bar + 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run']);
+    df['proportion'] = df['SSTs_Failed'] / df['SSTs_Run']
+    p_bar = df['SSTs_Failed'].sum() / df['SSTs_Run'].sum()
+    df['UCL'] = p_bar + 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run'])
     df['LCL'] = (p_bar - 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run'])).clip(lower=0)
     intervals = [wilson_score_interval(p, n) for p, n in zip(df['proportion'], df['SSTs_Run'])]
     df['ci_low'] = [i[0] for i in intervals]; df['ci_high'] = [i[1] for i in intervals]
@@ -301,7 +409,8 @@ def plot_p_chart(df):
     fig.add_trace(go.Scatter(x=df['Month'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash')));
     fig.add_trace(go.Scatter(x=df['Month'], y=df['LCL'], name='LCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'), showlegend=False))
     fig.add_hline(y=p_bar, name='Average Fail Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
-    fig.update_layout(title='<b>p-Chart for SST Failure Rate with Wilson Score Intervals</b>', yaxis_title='Proportion of SSTs Failed', yaxis_tickformat=".1%")
+    
+    fig.update_layout(title='<b>p-Chart for SST Failure Rate with Wilson Score Intervals</b>', yaxis_title='Proportion of SSTs Failed', xaxis_title='Month', yaxis_tickformat=".1%")
     st.plotly_chart(fig, use_container_width=True)
     st.error("**Actionable Insight:** The p-chart reveals a statistically significant spike in the SST failure rate in October, with the point clearly breaching the dynamic UCL. The Wilson Score Interval for that point is also entirely above the average failure rate, confirming the significance of the event. **Decision:** Launch an investigation focused on events in October. Review all column changes, mobile phase preparations, and instrument maintenance records from that period to find the root cause.")
 ## --- Other Attribute Charts (np, c, u) kept concise for brevity ---
@@ -334,11 +443,13 @@ def plot_stability_analysis(df):
         fig.add_hline(y=spec_limit, line_dash='dash', line_color=ERROR_RED, annotation_text="Spec Limit")
         
         pooled_justified = p_value_interaction >= 0.25
+        shelf_life = 0 # Initialize shelf_life
         if pooled_justified:
             slope, intercept, _, _, _ = stats.linregress(df['Time_months'], df['Potency_pct'])
-            shelf_life = (spec_limit - intercept) / slope
-            fig.add_trace(go.Scatter(x=df['Time_months'], y=intercept + slope * df['Time_months'], name='Pooled Regression', line=dict(color='black', width=4, dash='dash')))
-            if slope < 0: fig.add_vline(x=shelf_life, line_dash='dot', line_color=SUCCESS_GREEN, annotation_text=f"Pooled Shelf Life: {shelf_life:.1f} mo")
+            if slope < 0:
+                shelf_life = (spec_limit - intercept) / slope
+                fig.add_trace(go.Scatter(x=df['Time_months'], y=intercept + slope * df['Time_months'], name='Pooled Regression', line=dict(color='black', width=4, dash='dash')))
+                fig.add_vline(x=shelf_life, line_dash='dot', line_color=SUCCESS_GREEN, annotation_text=f"Pooled Shelf Life: {shelf_life:.1f} mo")
         else: 
             for batch in df['Batch'].unique():
                 batch_df = df[df['Batch'] == batch]
@@ -460,21 +571,17 @@ def run_hplc_maintenance_model(df):
         st.info("This SHAP plot shows which factors are pushing the risk score higher (red) or lower (blue).")
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(input_df)
-        expected_value = explainer.expected_value
         
-        # Robustly determine the correct SHAP values and expected value for the positive class (class 1)
+        # SME FIX: This logic correctly handles the output of shap.TreeExplainer for a binary classifier.
+        # It ensures we are using the SHAP values and expected value for the positive class (class 1: Needs_Maint).
         if isinstance(shap_values, list) and len(shap_values) == 2:
             shap_values_for_plot = shap_values[1]
-            if isinstance(expected_value, list) and len(expected_value) == 2:
-                expected_value_for_plot = expected_value[1]
-            else: # If expected_value is a single number
-                expected_value_for_plot = expected_value
-        else: # If shap_values is not a list of two items, assume it's the values for the positive class
+            expected_value_for_plot = explainer.expected_value[1]
+        else: # Fallback for cases where the output might not be a list
             shap_values_for_plot = shap_values
-            expected_value_for_plot = expected_value
+            expected_value_for_plot = explainer.expected_value
         
-        if shap_values_for_plot is not None and expected_value_for_plot is not None:
-             st_shap(shap.force_plot(expected_value_for_plot, shap_values_for_plot, input_df), height=150)
+        st_shap(shap.force_plot(expected_value_for_plot, shap_values_for_plot, input_df), height=150)
 
     st.warning("**Actionable Insight:** The interactive model shows the current high risk score is driven by high **Run Hours** and **Column Age**. Using the sliders, we can see that replacing the column (resetting age to 10) would lower the risk score significantly, but not enough to be 'safe'. This indicates the pump also requires service due to the run hours. **Decision:** Schedule a full preventative maintenance, including pump seal replacement and a new column, to bring the risk score back into the green zone.")
 
