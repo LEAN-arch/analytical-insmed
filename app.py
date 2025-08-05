@@ -367,17 +367,16 @@ def run_hplc_maintenance_model(df):
         st.info("This SHAP plot shows which factors are pushing the risk score higher (red) or lower (blue). The size of the bar indicates the magnitude of the factor's impact.")
         explainer = shap.TreeExplainer(model)
         
-        # FIX: For binary classifiers, shap_values and expected_value are lists with two elements (one for each class).
-        # We must select the elements for the positive class (class 1) to explain the "Needs_Maint" prediction.
-        # This matches the older SHAP API signature required by the environment.
-        expected_value = explainer.expected_value[1]
-        shap_values = explainer.shap_values(input_df)[1]
+        # FIX: This combination of SHAP/sklearn returns a single expected_value (float) and a single
+        # shap_values array (for the positive class). Remove incorrect '[1]' indexing.
+        expected_value = explainer.expected_value
+        shap_values = explainer.shap_values(input_df)
         
-        # Pass the base value, shap values (for the single instance), and feature values (as a Series) to the plot.
+        # Pass the base value, the 1D array of shap_values for the single instance,
+        # and the feature values (as a Pandas Series) to the plot.
         st_shap(shap.force_plot(expected_value, shap_values[0,:], input_df.iloc[0]), height=150)
 
     st.warning("**Actionable Insight:** The model predicts a very high probability that HPLC-01 requires preventative maintenance. The SHAP analysis reveals that the high number of **Run Hours** and **Pressure Spikes** are the primary drivers of this risk score. **Decision:** Schedule HPLC-01 for maintenance this week, prioritizing it over other instruments with lower risk scores to prevent an unexpected failure during a critical run.")
-
 ## --- QBD & QUALITY SYSTEMS HUB FUNCTIONS ---
 def render_qbd_sankey_chart(df):
     render_full_chart_briefing(context="Defining the relationships between material attributes, process parameters, and quality attributes for an HPLC purity method.", significance="This visualizes the core of QbD: understanding and controlling the linkages between what goes into a process (CMAs), what the process does (CPPs), and the quality of the output (CQAs). It forms the basis of a robust control strategy.", regulatory="This is a direct visual representation of the principles outlined in **ICH Q8 (Pharmaceutical Development)**. It provides clear justification for the parameters chosen for validation and routine monitoring.")
