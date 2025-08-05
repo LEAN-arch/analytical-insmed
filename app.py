@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v11.8 - Fully Restored & Robust Version (SHAP Replaced with Feature Importance)
+# v11.9 - Fully Restored & Robust Version (Attribute Charts Enriched)
 # ======================================================================================
 
 import streamlit as st
@@ -17,8 +17,7 @@ import math
 from statsmodels.tsa.holtwinters import SimpleExpSmoothing
 from statsmodels.formula.api import ols
 from statsmodels.stats.anova import anova_lm
-# SME FIX: The problematic SHAP library has been completely removed.
-# import shap
+import shap
 
 # ======================================================================================
 # SECTION 1: APP CONFIGURATION & AESTHETIC CONSTANTS
@@ -72,7 +71,10 @@ def render_full_chart_briefing(context: str, significance: str, regulatory: str)
     """
     st.markdown(briefing_card, unsafe_allow_html=True)
 
-# SME FIX: Removed the st_shap helper function as it is no longer needed.
+def st_shap(plot, height=None):
+    """Helper function to render SHAP plots in Streamlit."""
+    shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
+    st.components.v1.html(shap_html, height=height)
 
 def wilson_score_interval(p, n, z=1.96):
     """Calculates the Wilson score interval for a proportion."""
@@ -358,19 +360,44 @@ def plot_p_chart(df):
     st.error("**Actionable Insight:** The p-chart reveals a statistically significant spike in the SST failure rate in October, with the point clearly breaching the dynamic UCL. The Wilson Score Interval for that point is also entirely above the average failure rate, confirming the significance of the event. **Decision:** Launch an investigation focused on events in October. Review all column changes, mobile phase preparations, and instrument maintenance records from that period to find the root cause.")
 
 def plot_np_chart(df):
+    render_full_chart_briefing(context="Weekly monitoring of the number of defective vials from a filling line, where each sample consists of a fixed number of units.", significance="The np-chart is a simple and effective tool for operators to track the absolute count of non-conforming units when the sample size is constant. It provides an immediate, easy-to-understand signal of a potential process shift.", regulatory="This chart is a fundamental tool for process monitoring under GMP and supports batch record review and quality oversight as required by **21 CFR 211.110** (Sampling and testing of in-process materials and drug products).")
     n = df['Batches_Sampled'].iloc[0]; p_bar = df['Defective_Vials'].sum() / (len(df) * n); ucl = n * p_bar + 3 * np.sqrt(n * p_bar * (1-p_bar)); lcl = max(0, n * p_bar - 3 * np.sqrt(n * p_bar * (1-p_bar)))
-    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Week'], y=df['Defective_Vials'], name='Defective Vials', mode='lines+markers')); fig.add_hline(y=ucl, name='UCL', line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=lcl, name='LCL', line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=n*p_bar, name='Center Line', line_dash='dot', line_color=SUCCESS_GREEN)
+    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Week'], y=df['Defective_Vials'], name='Defective Vials', mode='lines+markers')); fig.add_hline(y=ucl, name='UCL', line_dash='dash', line_color=ERROR_RED, annotation_text="UCL"); fig.add_hline(y=lcl, name='LCL', line_dash='dash', line_color=ERROR_RED, annotation_text="LCL"); fig.add_hline(y=n*p_bar, name='Center Line', line_dash='dot', line_color=SUCCESS_GREEN, annotation_text="Mean")
+    
+    violations = df[df['Defective_Vials'] > ucl]
+    if not violations.empty:
+        violation_idx = violations.index[0]
+        fig.add_annotation(x=df['Week'][violation_idx], y=df['Defective_Vials'][violation_idx], text="<b>Process Shift!</b>", showarrow=True, arrowhead=2, ax=0, ay=-40, bgcolor=ERROR_RED, font=dict(color='white'))
+
     fig.update_layout(title='<b>np-Chart for Number of Defective Vials</b>', yaxis_title=f'Count of Defective Vials (n={n})', xaxis_title='Week'); st.plotly_chart(fig, use_container_width=True)
+    st.error(f"**Actionable Insight:** The np-chart shows a statistically significant increase in the number of defective vials in Week #{violations.iloc[0]['Week'] if not violations.empty else 'N/A'}. This indicates a special cause of variation in the filling and capping process. **Decision:** Place all batches manufactured in that week on quality hold. Initiate a formal investigation focusing on the maintenance records and performance of the vial capping machine during that specific period.")
 
 def plot_c_chart(df):
+    render_full_chart_briefing(context="Routine environmental monitoring (EM) of a GMP cleanroom, counting colony-forming units (CFUs) on a settle plate.", significance="The c-chart is the standard tool for monitoring the number of occurrences (defects) in a constant area of opportunity. It tracks the background microbial level of the manufacturing environment, serving as a critical leading indicator of potential contamination risks.", regulatory="An environmental monitoring program is a cornerstone of sterile manufacturing, mandated by **EU GMP Annex 1** and FDA guidance. This chart provides the documented evidence of the state of control of the classified areas.")
     c_bar = df['Contaminants_per_Plate'].mean(); ucl = c_bar + 3 * np.sqrt(c_bar); lcl = max(0, c_bar - 3 * np.sqrt(c_bar))
-    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Week'], y=df['Contaminants_per_Plate'], name='Contaminants', mode='lines+markers')); fig.add_hline(y=ucl, name='UCL', line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=lcl, name='LCL', line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=c_bar, name='Center Line', line_dash='dot', line_color=SUCCESS_GREEN)
+    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Week'], y=df['Contaminants_per_Plate'], name='Contaminants', mode='lines+markers')); fig.add_hline(y=ucl, name='UCL', line_dash='dash', line_color=ERROR_RED, annotation_text="UCL"); fig.add_hline(y=lcl, name='LCL', line_dash='dash', line_color=ERROR_RED, annotation_text="LCL"); fig.add_hline(y=c_bar, name='Center Line', line_dash='dot', line_color=SUCCESS_GREEN, annotation_text="Mean")
+
+    violations = df[df['Contaminants_per_Plate'] > ucl]
+    if not violations.empty:
+        violation_idx = violations.index[0]
+        fig.add_annotation(x=df['Week'][violation_idx], y=df['Contaminants_per_Plate'][violation_idx], text="<b>Action Limit Exceeded!</b>", showarrow=True, arrowhead=2, ax=0, ay=-40, bgcolor=ERROR_RED, font=dict(color='white'))
+
     fig.update_layout(title='<b>c-Chart for Environmental Monitoring</b>', yaxis_title='Colony Count per Plate', xaxis_title='Week'); st.plotly_chart(fig, use_container_width=True)
+    st.error(f"**Actionable Insight:** An action limit was exceeded in Week #{violations.iloc[0]['Week'] if not violations.empty else 'N/A'}, indicating a loss of environmental control. This is a significant quality event that could impact product sterility. **Decision:** Launch a high-priority investigation. Review all activities from that week, including HVAC performance data, personnel access logs, and cleaning records. All batches manufactured under these conditions must be assessed for potential impact.")
 
 def plot_u_chart(df):
+    render_full_chart_briefing(context="Monitoring the rate of particulate defects found during visual inspection of finished vials, where the sample size per batch varies.", significance="The u-chart is essential when the sample size or 'area of opportunity' changes for each subgroup. It normalizes the defect count into a rate (defects per unit), allowing for a fair, apples-to-apples comparison of process performance across batches of different sizes.", regulatory="Demonstrates a more sophisticated level of statistical control by properly accounting for varying sample sizes. This aligns with the principles of robust data analysis expected for batch release testing under **21 CFR 211.165**.")
     df['defects_per_unit'] = df['Particulate_Defects'] / df['Vials_Inspected']; u_bar = df['Particulate_Defects'].sum() / df['Vials_Inspected'].sum(); df['UCL'] = u_bar + 3 * np.sqrt(u_bar / df['Vials_Inspected']); df['LCL'] = (u_bar - 3 * np.sqrt(u_bar / df['Vials_Inspected'])).clip(lower=0)
     fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Batch'], y=df['defects_per_unit'], name='Defect Rate', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Batch'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'))); fig.add_trace(go.Scatter(x=df['Batch'], y=df['LCL'], name='LCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'), showlegend=False)); fig.add_hline(y=u_bar, name='Average Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
+
+    df['is_violation'] = df['defects_per_unit'] > df['UCL']
+    violations = df[df['is_violation']]
+    if not violations.empty:
+        violation_idx = violations.index[0]
+        fig.add_annotation(x=df['Batch'][violation_idx], y=df['defects_per_unit'][violation_idx], text="<b>Abnormal Defect Rate!</b>", showarrow=True, arrowhead=2, ax=0, ay=-40, bgcolor=ERROR_RED, font=dict(color='white'))
+
     fig.update_layout(title='<b>u-Chart for Particulate Defect Rate</b>', yaxis_title='Defects per Vial', xaxis_title='Batch'); st.plotly_chart(fig, use_container_width=True)
+    st.error(f"**Actionable Insight:** The u-chart correctly identified a statistically significant spike in the defect *rate* for Batch #{violations.iloc[0]['Batch'] if not violations.empty else 'N/A'}. A simple count might have missed this, but normalizing by sample size revealed a true process anomaly for this specific batch. **Decision:** Quarantine this batch immediately. The investigation must focus on the specific manufacturing records for this batch, looking for deviations such as issues with the vial washing process or a line stoppage that could have introduced particulates.")
 
 ## --- LIFECYCLE HUB FUNCTIONS ---
 def plot_stability_analysis(df):
@@ -497,18 +524,12 @@ def run_hplc_maintenance_model(df):
         fig_gauge = go.Figure(go.Indicator(mode = "gauge+number", value = pred_prob * 100, title = {'text': "Maintenance Risk Score"}, gauge = {'axis': {'range': [None, 100]}, 'bar': {'color': ERROR_RED if pred_prob > 0.7 else WARNING_AMBER if pred_prob > 0.4 else SUCCESS_GREEN}}))
         fig_gauge.update_layout(height=300, margin=dict(t=50, b=0)); st.plotly_chart(fig_gauge, use_container_width=True)
     with colB:
-        # SME FIX: Replaced the unstable SHAP plot with a stable and informative
-        # feature importance plot, which is built-in to scikit-learn's tree-based models.
         st.subheader("Model Explainability: Feature Importance")
         st.info("This plot shows the factors the model weighs most heavily when calculating the risk score.")
-        
-        # Create a DataFrame for plotting
         importance_df = pd.DataFrame({
             'Feature': feature_names,
             'Importance': model.feature_importances_
         }).sort_values(by='Importance', ascending=True)
-        
-        # Create and display the plot
         fig_importance = px.bar(
             importance_df,
             x='Importance',
