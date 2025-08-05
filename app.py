@@ -372,7 +372,9 @@ def plot_cpk_analysis(df):
         st.success(f"**Actionable Insight:** The process is highly capable against both specification (Cpk={cpk:.2f}) and internal guard band (Cpk-GB={cpk_gb:.2f}) limits. **Decision:** The process is robust and approved for routine manufacturing. Monitoring can continue at a standard frequency.")
     else:
         st.error(f"**Actionable Insight:** The Cpk of {cpk:.2f} is below the required 1.33. The process is not capable. **Decision:** Halt process validation. A full root cause analysis is required to re-develop the process to reduce variability or re-center the mean.")
-    def plot_hotelling_t2_chart(df):
+   
+def plot_hotelling_t2_chart(df):
+    # SME FIX: The entire block below was missing its indentation. This has been corrected.
     render_full_chart_briefing(context="Simultaneously monitoring two correlated CQAs from a bioreactor run.", significance="This advanced example includes a **Contribution Plot**, a critical diagnostic tool. When the T² chart signals an anomaly, the contribution plot immediately identifies *which* variable was most responsible for the out-of-control signal, directing the investigation efficiently.", regulatory="Using multivariate control charts demonstrates a mature understanding of process interactions (**ICH Q8**). Including contribution plots shows a sophisticated and systematic approach to investigations (**21 CFR 211.192**), moving beyond guessing to data-driven diagnosis.")
     data = df.values
     mean_vec = data.mean(axis=0)
