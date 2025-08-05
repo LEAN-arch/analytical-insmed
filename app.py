@@ -368,11 +368,13 @@ def run_hplc_maintenance_model(df):
         st.info("This SHAP plot shows which factors are pushing the risk score higher (red) or lower (blue). The size of the bar indicates the magnitude of the factor's impact.")
         explainer = shap.TreeExplainer(model)
         
-        # FIX: Revert to the explicit, multi-argument `force_plot` call to match the older SHAP API.
-        expected_value = explainer.expected_value
-        shap_values = explainer.shap_values(input_df)[0] # Ensure shap_values is 1D for a single instance
+        # FIX: For binary classifiers, shap_values and expected_value are lists with two elements (one for each class).
+        # We must select the elements for the positive class (class 1) to explain the "Needs_Maint" prediction.
+        expected_value = explainer.expected_value[1]
+        shap_values = explainer.shap_values(input_df)[1]
         
-        st_shap(shap.force_plot(expected_value, shap_values, input_df.iloc[0]), height=150)
+        # Pass the base value, shap values (for the single instance), and feature values (as a Series) to the plot.
+        st_shap(shap.force_plot(expected_value, shap_values[0], input_df.iloc[0]), height=150)
 
     st.warning("**Actionable Insight:** The model predicts a very high probability that HPLC-01 requires preventative maintenance. The SHAP analysis reveals that the high number of **Run Hours** and **Pressure Spikes** are the primary drivers of this risk score. **Decision:** Schedule HPLC-01 for maintenance this week, prioritizing it over other instruments with lower risk scores to prevent an unexpected failure during a critical run.")
 
