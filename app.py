@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v10.0 - Final, SME-Enriched, Master-Class Version
+# v10.2 - Final, Fully Debugged & Environment-Compatible Version
 # ======================================================================================
 
 import streamlit as st
@@ -76,7 +76,6 @@ def st_shap(plot, height=None):
 # ======================================================================================
 # SECTION 3: DATA GENERATION
 # ======================================================================================
-# Corrected 'generate_master_data' function
 @st.cache_data(ttl=3600)
 def generate_master_data():
     np.random.seed(42)
@@ -96,16 +95,10 @@ def generate_master_data():
     mean_vec = [95, 1.0e13]
     std_devs = [1.5, 0.1e13]
     correlation = 0.7
-    cov_mat = [[std_devs[0]**2, correlation * std_devs[0] * std_devs[1]], 
-               [correlation * std_devs[0] * std_devs[1], std_devs[1]**2]]
-    
-    # DEBUG FIX: Enforce numerical symmetry to prevent floating-point-related RuntimeWarning.
-    cov_mat = (np.array(cov_mat) + np.array(cov_mat).T) / 2
-    
+    cov_mat_list = [[std_devs[0]**2, correlation * std_devs[0] * std_devs[1]], [correlation * std_devs[0] * std_devs[1], std_devs[1]**2]]
+    cov_mat = (np.array(cov_mat_list) + np.array(cov_mat_list).T) / 2
     t2_data_in = np.random.multivariate_normal(mean_vec, cov_mat, 30)
-    t2_outlier = [97.5, 0.9e13]
-    t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]])
-    t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer_vg_mL'])
+    t2_outlier = [97.5, 0.9e13]; t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]]); t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer_vg_mL'])
     
     p_data = {'Month': pd.to_datetime(pd.date_range(start='2023-01-01', periods=12, freq='ME')), 'SSTs_Run': np.random.randint(40, 60, 12)}; p_df = pd.DataFrame(p_data); p_df['SSTs_Failed'] = np.random.binomial(n=p_df['SSTs_Run'], p=0.05); p_df.loc[9, 'SSTs_Failed'] = 8
     
@@ -122,8 +115,9 @@ def generate_master_data():
     # --- Data for PREDICTIVE HUB ---
     oos_df = pd.DataFrame({'Instrument': np.random.choice(['HPLC-01', 'HPLC-02', 'CE-01'], 100), 'Analyst': np.random.choice(['Smith', 'Lee', 'Chen'], 100), 'Molecule_Type': np.random.choice(['mAb', 'AAV'], 100), 'Root_Cause': np.random.choice(['Sample_Prep_Error', 'Instrument_Malfunction', 'Column_Issue'], 100, p=[0.5, 0.3, 0.2])})
     
+    # FIX: Reverted to `lower=0` for compatibility with the older pandas version in the environment.
     backlog_vals = 10 + np.arange(104)*0.5 + np.random.normal(0, 5, 104) + np.sin(np.arange(104)/8)*5
-    backlog_df = pd.DataFrame({'Week': pd.date_range('2022-01-01', periods=104, freq='W'), 'Backlog': backlog_vals.clip(min=0)})
+    backlog_df = pd.DataFrame({'Week': pd.date_range('2022-01-01', periods=104, freq='W'), 'Backlog': backlog_vals.clip(lower=0)})
     
     maintenance_df = pd.DataFrame({'Run_Hours': np.random.randint(50, 1000, 100), 'Pressure_Spikes': np.random.randint(0, 20, 100), 'Column_Age_Days': np.random.randint(10, 300, 100)}); maintenance_df['Needs_Maint'] = (maintenance_df['Run_Hours'] > 600) | (maintenance_df['Pressure_Spikes'] > 15) | (maintenance_df['Column_Age_Days'] > 250)
 
@@ -138,30 +132,19 @@ def generate_master_data():
 def plot_levey_jennings(df):
     render_full_chart_briefing(context="Daily QC analysis of a certified reference material on an HPLC system to ensure system performance.", significance="Detects shifts or increased variability in an analytical instrument's performance, ensuring the validity of daily sample results. It distinguishes between random error (a single outlier) and systematic error (a developing bias).", regulatory="Directly supports **21 CFR 211.160** (General requirements for laboratory controls) and **ISO 17025** by providing documented evidence of the ongoing validity of test methods. Westgard rules are an industry best practice for clinical and QC labs.")
     mean, sd = 100.0, 2.0
-    
     fig = go.Figure()
-    # Add shaded zones first (layers)
     fig.add_hrect(y0=mean - 3*sd, y1=mean + 3*sd, line_width=0, fillcolor='rgba(255, 193, 7, 0.1)', layer="below", name='±3s Zone')
     fig.add_hrect(y0=mean - 2*sd, y1=mean + 2*sd, line_width=0, fillcolor='rgba(76, 175, 80, 0.2)', layer="below", name='±2s Zone')
     fig.add_hrect(y0=mean - sd, y1=mean + sd, line_width=0, fillcolor='rgba(76, 175, 80, 0.3)', layer="below", name='±1s Zone')
-    
-    # Add the scatter trace with customdata
     df['Deviation_SD'] = (df['Value'] - mean) / sd
-    fig.add_trace(go.Scatter(
-        y=df['Value'], 
-        mode='lines+markers', 
-        line=dict(color=PRIMARY_COLOR),
-        customdata=df[['Analyst', 'Deviation_SD']],
-        hovertemplate='<b>Value: %{y:.2f}</b><br>Analyst: %{customdata[0]}<br>Deviation: %{customdata[1]:.2f} SD<extra></extra>'
-    ))
-    
+    fig.add_trace(go.Scatter(y=df['Value'], mode='lines+markers', line=dict(color=PRIMARY_COLOR), customdata=df[['Analyst', 'Deviation_SD']], hovertemplate='<b>Value: %{y:.2f}</b><br>Analyst: %{customdata[0]}<br>Deviation: %{customdata[1]:.2f} SD<extra></extra>'))
     fig.add_hline(y=mean, line_dash='solid', line_color=SUCCESS_GREEN, annotation_text="Mean")
     fig.add_annotation(x=20, y=106.5, text="<b>1-3s Violation</b><br>Random Error", showarrow=True, arrowhead=2, ax=0, ay=-50, bgcolor=ERROR_RED, font=dict(color='white'))
     fig.add_annotation(x=26, y=104.8, text="<b>2-2s Violation</b><br>Systematic Bias", showarrow=True, arrowhead=2, ax=0, ay=50, bgcolor=WARNING_AMBER)
-    
     fig.update_layout(title="<b>Levey-Jennings Chart with Westgard Rule Violations</b>", yaxis_title="Reference Material Recovery (%)", xaxis_title="Run Number")
     st.plotly_chart(fig, use_container_width=True)
     st.error("**Actionable Insight:** The 1-3s violation indicates a random error, requiring a re-run. The subsequent 2-2s violation indicates a systematic bias. **Decision:** Halt testing on the instrument and issue a work order to investigate the mobile phase preparation process and recalibrate the detector.")
+
 def plot_ewma_chart(df):
     render_full_chart_briefing(context="Monitoring a critical quality attribute (CQA), like the concentration of a key impurity, over dozens of purification runs.", significance="Provides a highly sensitive early warning for small but persistent process drifts that could lead to out-of-specification (OOS) results if left unchecked, enabling proactive rather than reactive maintenance.", regulatory="Supports the principles of Continued Process Verification (CPV) outlined in the **FDA's Process Validation Guidance** and **ICH Q8**. It is a tool to ensure the process remains in a state of control throughout its lifecycle.")
     lam = 0.2; mean = df['Impurity'].iloc[:20].mean(); sd = df['Impurity'].iloc[:20].std(); df['EWMA'] = df['Impurity'].ewm(span=(2/lam)-1, adjust=False).mean(); n = df.index + 1; ucl = mean + 3 * sd * np.sqrt((lam / (2 - lam)) * (1 - (1 - lam)**(2 * n))); lcl = mean - 3 * sd * np.sqrt((lam / (2 - lam)) * (1 - (1 - lam)**(2 * n)))
@@ -175,8 +158,6 @@ def plot_cusum_chart(df):
     render_full_chart_briefing(context="Monitoring a critical process parameter like fill volume on a high-speed aseptic filling line.", significance="Allows for the fastest possible detection of the *onset* of a small, sustained process shift. This is critical for minimizing the amount of non-conforming product generated in high-volume, high-cost manufacturing processes.", regulatory="This is an advanced SPC tool that demonstrates a mature quality system focused on rapid response, aligning with the risk-based principles of **ICH Q9**. It provides a higher level of process control than basic Shewhart charts.")
     target = 10.0; sd = 0.05; k = 0.5 * sd; h = 5 * sd; df['SH-'] = 0.0
     for i in range(1, len(df)): df.loc[i, 'SH-'] = max(0, df.loc[i-1, 'SH-'] + target - df.loc[i, 'Fill_Volume'] - k)
-    # DEBUG FIX: Removed the line `fig.data[0].customdata=df['Nozzle']` which incorrectly overwrote the customdata and would break the hovertemplate.
-    # The `customdata` is now correctly set to the full dataframe `df` within the `go.Scatter` call.
     fig = go.Figure(); fig.add_trace(go.Scatter(y=df['SH-'], name='CUSUM Low (SH-)', mode='lines+markers', line=dict(color=PRIMARY_COLOR, width=3), customdata=df, hovertemplate='<b>Sample %{x}</b><br>Nozzle: %{customdata[1]}<br>CUSUM Value: %{y:.3f}<extra></extra>')); fig.add_hline(y=h, line_dash='dash', line_color=ERROR_RED, annotation_text="Decision Limit (H)")
     violation_idx = df[df['SH-'] > h].first_valid_index(); fig.add_annotation(x=violation_idx, y=df['SH-'][violation_idx], text="<b>CUSUM Signal!</b>", showarrow=True, arrowhead=2, ax=20, ay=-60, bgcolor=PRIMARY_COLOR, font=dict(color='white'))
     fig.update_layout(title="<b>CUSUM Chart: Rapid Detection of Fill Volume Shift</b>", yaxis_title="Cumulative Sum from Target", xaxis_title="Sample Number")
@@ -244,8 +225,8 @@ def plot_hotelling_t2_chart(df):
 def plot_p_chart(df):
     render_full_chart_briefing(context="Monitoring the proportion of monthly HPLC System Suitability Tests (SSTs) that fail.", significance="Tracks the failure rate of a key quality system when the number of tests performed each month varies. It provides a high-level view of the health and reliability of an entire analytical system.", regulatory="Directly supports quality system monitoring as required by **21 CFR 211** and **EudraLex Vol. 4**. Tracking SST failures is a critical component of laboratory control and data integrity (**ALCOA+**).")
     df['proportion'] = df['SSTs_Failed'] / df['SSTs_Run']; p_bar = df['SSTs_Failed'].sum() / df['SSTs_Run'].sum(); df['UCL'] = p_bar + 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run']); 
-    # DEBUG FIX: Use min=0 instead of the deprecated lower=0.
-    df['LCL'] = (p_bar - 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run'])).clip(min=0)
+    # FIX: Reverted to `lower=0` for compatibility with the older pandas version.
+    df['LCL'] = (p_bar - 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run'])).clip(lower=0)
     fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Month'], y=df['proportion'], name='Proportion Failed', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Month'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'))); fig.add_hline(y=p_bar, name='Average Fail Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
     fig.update_layout(title='<b>p-Chart for System Suitability Test (SST) Failure Rate</b>', yaxis_title='Proportion of SSTs Failed', yaxis_tickformat=".1%")
     st.plotly_chart(fig, use_container_width=True)
@@ -272,8 +253,8 @@ def plot_c_chart(df):
 def plot_u_chart(df):
     render_full_chart_briefing(context="Monitoring the rate of particulate defects found during the visual inspection of finished drug product vials, where the number of vials inspected from each batch varies.", significance="Provides a normalized measure of quality (defects per unit) that is comparable across batches of different sizes. This is crucial for accurately assessing process stability when production volumes fluctuate.", regulatory="A more sophisticated tool for lot release and stability testing (**21 CFR 211.165, 211.166**). Using a u-chart over a simpler c-chart demonstrates a higher level of statistical understanding when dealing with variable sample sizes.")
     df['defects_per_unit'] = df['Particulate_Defects'] / df['Vials_Inspected']; u_bar = df['Particulate_Defects'].sum() / df['Vials_Inspected'].sum(); df['UCL'] = u_bar + 3 * np.sqrt(u_bar / df['Vials_Inspected']); 
-    # DEBUG FIX: Use min=0 instead of the deprecated lower=0.
-    df['LCL'] = (u_bar - 3 * np.sqrt(u_bar / df['Vials_Inspected'])).clip(min=0)
+    # FIX: Reverted to `lower=0` for compatibility with the older pandas version.
+    df['LCL'] = (u_bar - 3 * np.sqrt(u_bar / df['Vials_Inspected'])).clip(lower=0)
     fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Batch'], y=df['defects_per_unit'], name='Defect Rate', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Batch'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'))); fig.add_hline(y=u_bar, name='Average Defect Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
     fig.add_annotation(x=11, y=df['defects_per_unit'].iloc[10], text="<b>Spike Detected</b>", bgcolor=ERROR_RED, font_color='white')
     fig.update_layout(title='<b>u-Chart for Particulate Defect Rate per Vial</b>', yaxis_title='Defects per Vial', xaxis_title='Batch Number')
@@ -310,7 +291,6 @@ def render_doe_suite(screening_df, doe_df):
         poly = PolynomialFeatures(degree=2); X_poly = poly.fit_transform(doe_df[feature_names]); model = LinearRegression().fit(X_poly, doe_df['Peak_Resolution'])
         x = np.linspace(-1, 1, 30); y = np.linspace(-1, 1, 30); x_grid, y_grid = np.meshgrid(x, y)
         
-        # Create a DataFrame with correct feature names to prevent potential warnings/errors
         grid_df = pd.DataFrame(np.c_[x_grid.ravel(), y_grid.ravel()], columns=feature_names)
         X_pred_poly = poly.transform(grid_df)
         
@@ -319,6 +299,7 @@ def render_doe_suite(screening_df, doe_df):
         st.plotly_chart(fig_rsm, use_container_width=True)
         st.info("The contour plot defines the Method Operable Design Region (MODR). The method setpoint will be chosen at the center of this space for maximum robustness.")
     st.success("**Actionable Insight:** The two-phase DOE approach provides a highly efficient and scientifically sound path to a robust method. **Decision:** Finalize the method SOP with the setpoints derived from the RSM optimization and proceed to formal validation.")
+
 def plot_method_equivalency_tost(df):
     render_full_chart_briefing(context="Comparing a newly developed, faster UPLC method against the legacy validated HPLC method to ensure results are comparable before replacing the old method.", significance="Proves that two methods are statistically equivalent and can be used interchangeably. This is critical for post-approval changes, method updates, or transfers between sites without needing to re-establish all specifications.", regulatory="The TOST (Two One-Sided T-Tests) approach is the gold standard for demonstrating equivalency and is preferred by the **FDA** over simple t-tests. It directly supports lifecycle management as described in **ICH Q12**.")
     diff = df['UPLC'] - df['HPLC']; n = len(diff); mean_diff = diff.mean(); std_diff = diff.std(ddof=1); se_diff = std_diff / np.sqrt(n); t_crit = stats.t.ppf(0.95, df=n-1); ci_lower = mean_diff - t_crit * se_diff; ci_upper = mean_diff + t_crit * se_diff; equiv_limit = 0.5
@@ -335,12 +316,17 @@ def get_oos_rca_model(_df):
     df_encoded = pd.get_dummies(_df, columns=['Instrument', 'Analyst', 'Molecule_Type'])
     features = [col for col in df_encoded.columns if col != 'Root_Cause']; target = 'Root_Cause'; X, y = df_encoded[features], df_encoded[target]
     model = RandomForestClassifier(n_estimators=100, random_state=42).fit(X, y); return model, X.columns
+
 def run_oos_prediction_model(df):
     render_full_chart_briefing(context="An analyst reports an Out-of-Specification (OOS) result and a formal lab investigation is initiated.", significance="This predictive tool acts as a 'digital SME' to guide the investigation. By analyzing the parameters of the failed run, it suggests the most probable root cause, focusing the initial troubleshooting efforts and saving valuable time.", regulatory="Demonstrates a proactive, data-driven approach to laboratory investigations as required by **21 CFR 211.192**. It ensures investigations are thorough, timely, and based on historical data patterns, not just guesswork.")
     model, feature_cols = get_oos_rca_model(df)
     col1, col2, col3 = st.columns(3); instrument = col1.selectbox("Instrument Used", df['Instrument'].unique()); analyst = col2.selectbox("Analyst", df['Analyst'].unique()); molecule = col3.selectbox("Molecule Type", df['Molecule_Type'].unique())
     if st.button("🔬 Predict Probable Root Cause", type="primary"):
-        input_data = pd.DataFrame(columns=feature_cols, index=[0]).fillna(0); input_data[f'Instrument_{instrument}'] = 1; input_data[f'Analyst_{analyst}'] = 1; input_data[f'Molecule_Type_{molecule}'] = 1
+        # FIX: Create the dataframe with zeros directly to avoid FutureWarning.
+        input_data = pd.DataFrame(0, columns=feature_cols, index=[0])
+        input_data[f'Instrument_{instrument}'] = 1
+        input_data[f'Analyst_{analyst}'] = 1
+        input_data[f'Molecule_Type_{molecule}'] = 1
         pred_proba = model.predict_proba(input_data); proba_df = pd.DataFrame(pred_proba.T, index=model.classes_, columns=['Probability']).sort_values('Probability', ascending=False)
         fig = px.bar(proba_df, x='Probability', y=proba_df.index, orientation='h', title="<b>Predicted Root Cause Probability</b>", text_auto='.1%')
         st.plotly_chart(fig, use_container_width=True)
@@ -358,10 +344,12 @@ def plot_backlog_forecast(df):
     
     st.plotly_chart(fig, use_container_width=True)
     st.error(f"**Actionable Insight:** The time series forecast predicts that the sample backlog will exceed **{forecast.iloc[-1]:.0f} samples** within the next 6 months. This trend is unsustainable with the current staffing level. **Decision:** Submit a formal headcount request for one additional Research Associate, using this forecast as the primary data-driven justification.")
+
 @st.cache_resource
 def get_maint_model(_df):
     features = ['Run_Hours', 'Pressure_Spikes', 'Column_Age_Days']; target = 'Needs_Maint'; X, y = _df[features], _df[target]
     model = RandomForestClassifier(n_estimators=100, random_state=42).fit(X, y); return model
+
 def run_hplc_maintenance_model(df):
     render_full_chart_briefing(context="Managing a fleet of heavily used HPLC instruments and deciding which ones to prioritize for preventative maintenance.", significance="Shifts maintenance from a fixed, time-based schedule to a proactive, condition-based model. It reduces unnecessary maintenance on healthy instruments and prevents unexpected failures on high-risk instruments, maximizing uptime.", regulatory="Ensures instruments remain in a qualified state as required by **21 CFR 211.160(b)**. A predictive model provides a sophisticated, risk-based approach (**ICH Q9**) to maintaining the validated state of equipment.")
     model = get_maint_model(df)
@@ -376,10 +364,14 @@ def run_hplc_maintenance_model(df):
     with colB:
         st.subheader("Explainable AI (XAI): Why this score?")
         st.info("This SHAP plot shows which factors are pushing the risk score higher (red) or lower (blue). The size of the bar indicates the magnitude of the factor's impact.")
-        explainer = shap.TreeExplainer(model); shap_values = explainer.shap_values(input_df)[1]
-        # DEBUG FIX: Removed `matplotlib=True` argument, which returns the wrong object type for the `st_shap` helper function.
-        # The default JS-based plot is now correctly generated and rendered.
-        st_shap(shap.force_plot(explainer.expected_value[1], shap_values, input_df), height=150)
+        explainer = shap.TreeExplainer(model)
+        
+        # FIX: For binary classification, TreeExplainer often returns a single array of shap_values
+        # and a single expected_value. Removed the incorrect `[1]` indexing that caused an IndexError.
+        shap_values = explainer.shap_values(input_df)
+        expected_value = explainer.expected_value
+        
+        st_shap(shap.force_plot(expected_value, shap_values, input_df), height=150)
 
     st.warning("**Actionable Insight:** The model predicts a very high probability that HPLC-01 requires preventative maintenance. The SHAP analysis reveals that the high number of **Run Hours** and **Pressure Spikes** are the primary drivers of this risk score. **Decision:** Schedule HPLC-01 for maintenance this week, prioritizing it over other instruments with lower risk scores to prevent an unexpected failure during a critical run.")
 
@@ -416,10 +408,7 @@ def run_interactive_rca_fishbone():
         'Environment': ['Lab temperature out of range', 'Vibration near balance', 'Power fluctuation']
     }
     
-    # Use columns for a robust, non-interactive but clear layout
     cols = st.columns(3)
-    
-    # Distribute the categories into columns
     categories = list(causes.keys())
     for i, cat in enumerate(categories):
         with cols[i % 3]:
@@ -430,7 +419,6 @@ def run_interactive_rca_fishbone():
 
     st.success("**Actionable Insight:** The investigation team uses this structured tool to brainstorm. After testing several hypotheses, the team confirmed through re-analysis with a freshly prepared standard that the **'Reference standard degraded'** (under 'Material') was the true root cause. **Decision:** A CAPA will be initiated to revise the reference standard management SOP to include more frequent stability checks.")
 
-# DEBUG FIX: Added the missing function definition for `render_troubleshooting_flowchart`.
 def render_troubleshooting_flowchart():
     st.info("This flowchart provides a systematic, compliant path for investigating an Out-of-Specification (OOS) result.")
     graph_definition = """
@@ -543,19 +531,25 @@ PAGES = {
 selection = st.sidebar.radio("Go to", list(PAGES.keys()))
 
 # --- Retrieve Data ---
-budget_df, team_df, lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df, stability_df, tost_df, screening_df, doe_df, oos_df, backlog_df, maintenance_df, sankey_df = generate_master_data()
+(
+    budget_df, team_df, lj_df, ewma_df, cusum_df, zone_df, imr_df, 
+    cpk_df, t2_df, p_df, np_df, c_df, u_df, stability_df, tost_df, 
+    screening_df, doe_df, oos_df, backlog_df, maintenance_df, sankey_df
+) = generate_master_data()
 
 # --- Render the selected page ---
+page_function = PAGES[selection]
+
 if selection == "Executive & Strategic Hub":
-    render_strategic_hub_page(budget_df, team_df)
+    page_function(budget_df, team_df)
 elif selection == "QbD & Quality Systems Hub":
-    render_qbd_quality_systems_hub_page(sankey_df)
+    page_function(sankey_df)
 elif selection == "Method & Product Lifecycle Hub":
-    render_lifecycle_hub_page(stability_df, tost_df, screening_df, doe_df)
+    page_function(stability_df, tost_df, screening_df, doe_df)
 elif selection == "Predictive Operations & Diagnostics":
-    render_predictive_hub_page(oos_df, backlog_df, maintenance_df)
+    page_function(oos_df, backlog_df, maintenance_df)
 elif selection == "Advanced Statistical Toolkit":
-    render_statistical_toolkit_page(lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df)
+    page_function(lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Role Focus")
