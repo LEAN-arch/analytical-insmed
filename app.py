@@ -382,16 +382,20 @@ def run_hplc_maintenance_model(df):
         st.info("This SHAP plot shows which factors are pushing the risk score higher (red) or lower (blue). The size of the bar indicates the magnitude of the factor's impact.")
         explainer = shap.TreeExplainer(model)
 
-        # SME FIX: The SHAP version in the environment requires an explicit, multi-argument call for force_plot,
-        # treating the binary classifier as a multi-output model. This code adheres strictly to the API
-        # recommended by the error message.
+        # SME FIX: The IndexError indicates that for this binary classifier, SHAP is returning
+        # the expected value and shap_values in a list/array of size 1, not 2.
+        # We must access the first element at index [0], not the non-existent second element at [1].
+        shap_values = explainer.shap_values(input_df)
+        expected_value = explainer.expected_value
+        
+        # Check if the output is a list (standard for binary classifiers) or a single array
+        if isinstance(shap_values, list):
+             st_shap(shap.force_plot(expected_value[0], shap_values[0], input_df), height=150)
+        else: # If it's just a single numpy array for the positive class
+             st_shap(shap.force_plot(expected_value, shap_values, input_df), height=150)
 
-        # Pass the base value for class 1, the SHAP values for class 1, and the feature DataFrame.
-        # The force_plot function will correctly render the plot for the first (and only) instance.
-        st_shap(shap.force_plot(explainer.expected_value[1], explainer.shap_values(input_df)[1], input_df), height=150)
 
     st.warning("**Actionable Insight:** The model predicts a very high probability that HPLC-01 requires preventative maintenance. The SHAP analysis reveals that the high number of **Run Hours** and **Pressure Spikes** are the primary drivers of this risk score. **Decision:** Schedule HPLC-01 for maintenance this week, prioritizing it over other instruments with lower risk scores to prevent an unexpected failure during a critical run.")
-## --- QBD & QUALITY SYSTEMS HUB FUNCTIONS ---
 def render_qbd_sankey_chart(df):
     render_full_chart_briefing(context="Defining the relationships between material attributes, process parameters, and quality attributes for an HPLC purity method.", significance="This visualizes the core of QbD: understanding and controlling the linkages between what goes into a process (CMAs), what the process does (CPPs), and the quality of the output (CQAs). It forms the basis of a robust control strategy.", regulatory="This is a direct visual representation of the principles outlined in **ICH Q8 (Pharmaceutical Development)**. It provides clear justification for the parameters chosen for validation and routine monitoring.")
     all_nodes = pd.unique(df[['Source', 'Target']].values.ravel('K')); node_map = {node: i for i, node in enumerate(all_nodes)}
