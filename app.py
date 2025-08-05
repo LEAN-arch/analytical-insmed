@@ -82,7 +82,7 @@ def generate_master_data():
     # --- Base App Data ---
     budget_df = pd.DataFrame({'Category': ['OpEx (Consumables)', 'OpEx (Team)', 'CapEx (New Tech)', 'Contractors (CDMO)'], 'Budgeted': [800, 1200, 500, 300], 'Actual': [750, 1180, 550, 250]})
     team_df = pd.DataFrame({'Scientist': ['J. Doe (Lead)', 'S. Smith', 'M. Lee', 'K. Chen'], 'Role': ['Assoc. Director', 'Sr. Scientist', 'Scientist II', 'Scientist I'], 'Expertise': ['HPLC/CE', 'ddPCR/qPCR', 'Cell-Based Assays', 'ELISA'], 'Development_Goal': ['Mentor team on QbD', 'Lead AAV-201 analytics', 'Cross-train on ddPCR', 'Gain validation experience']})
-    
+
     # --- Data for STATISTICAL TOOLKIT ---
     lj_data = np.random.normal(100.0, 2.0, 30); lj_data[20] = 106.5; lj_data[25:27] = [104.5, 104.8]; lj_df = pd.DataFrame({'Value': lj_data, 'Analyst': np.random.choice(['Smith', 'Lee'], 30)})
     ewma_data = np.random.normal(0.5, 0.05, 40); ewma_data[20:] += 0.06; ewma_df = pd.DataFrame({'Impurity': ewma_data, 'Batch': [f"AAV101-B{100+i}" for i in range(40)]})
@@ -90,7 +90,7 @@ def generate_master_data():
     zone_data = np.random.normal(20, 0.5, 25); zone_data[15:] -= 0.4; zone_df = pd.DataFrame({'Seal_Strength': zone_data, 'Operator': np.random.choice(['Op-A', 'Op-B'], 25)})
     imr_data = np.random.normal(99.5, 0.1, 100); imr_data[80:] -= 0.25; imr_df = pd.DataFrame({'Purity': imr_data, 'Date': pd.to_datetime(pd.date_range(start='2023-01-01', periods=100, freq='D'))})
     cpk_data = np.random.normal(50.5, 0.25, 150); cpk_df = pd.DataFrame({'Titer': cpk_data})
-    
+
     # --- Hotelling T² data generation with fix ---
     mean_vec = [95, 1.0e13]
     std_devs = [1.5, 0.1e13]
@@ -99,25 +99,25 @@ def generate_master_data():
     cov_mat = (np.array(cov_mat_list) + np.array(cov_mat_list).T) / 2
     t2_data_in = np.random.multivariate_normal(mean_vec, cov_mat, 30)
     t2_outlier = [97.5, 0.9e13]; t2_data = np.vstack([t2_data_in[:24], t2_outlier, t2_data_in[24:]]); t2_df = pd.DataFrame(t2_data, columns=['Purity_Pct', 'Titer_vg_mL'])
-    
+
     p_data = {'Month': pd.to_datetime(pd.date_range(start='2023-01-01', periods=12, freq='ME')), 'SSTs_Run': np.random.randint(40, 60, 12)}; p_df = pd.DataFrame(p_data); p_df['SSTs_Failed'] = np.random.binomial(n=p_df['SSTs_Run'], p=0.05); p_df.loc[9, 'SSTs_Failed'] = 8
-    
+
     np_df = pd.DataFrame({'Week': range(1, 21), 'Batches_Sampled': 50, 'Defective_Vials': np.random.binomial(n=50, p=0.04, size=20)}); np_df.loc[12, 'Defective_Vials'] = 7
     c_df = pd.DataFrame({'Week': range(1, 21), 'Contaminants_per_Plate': np.random.poisson(lam=3, size=20)}); c_df.loc[15, 'Contaminants_per_Plate'] = 9
     u_data = {'Batch': range(1, 16), 'Vials_Inspected': np.random.randint(50, 150, 15)}; u_df = pd.DataFrame(u_data); u_df['Particulate_Defects'] = np.random.poisson(lam=u_df['Vials_Inspected'] * 0.02); u_df.loc[10, 'Particulate_Defects'] = 8
-    
+
     # --- Data for LIFECYCLE HUB ---
     stability_df = pd.DataFrame({'Time_months': [0, 3, 6, 9, 12, 18, 24], 'Potency_pct': [101.2, 100.8, 99.5, 98.9, 98.1, 97.0, 95.8]})
     tost_df = pd.DataFrame({'HPLC': np.random.normal(98.5, 0.5, 30), 'UPLC': np.random.normal(98.7, 0.4, 30)})
     screening_df = pd.DataFrame({'Factor': ['Temp', 'pH', 'Flow_Rate', 'Gradient', 'Column_Lot', 'Analyst'], 'Effect_Size': [0.2, 1.8, 0.1, 1.5, 0.3, 0.2]})
     doe_df = pd.DataFrame(np.random.uniform(-1, 1, (15, 2)), columns=['pH', 'Gradient_Slope']); doe_df['Peak_Resolution'] = 2.5 - 0.5*doe_df['pH']**2 - 0.8*doe_df['Gradient_Slope']**2 + 0.3*doe_df['pH']*doe_df['Gradient_Slope'] + np.random.normal(0, 0.1, 15)
-    
+
     # --- Data for PREDICTIVE HUB ---
     oos_df = pd.DataFrame({'Instrument': np.random.choice(['HPLC-01', 'HPLC-02', 'CE-01'], 100), 'Analyst': np.random.choice(['Smith', 'Lee', 'Chen'], 100), 'Molecule_Type': np.random.choice(['mAb', 'AAV'], 100), 'Root_Cause': np.random.choice(['Sample_Prep_Error', 'Instrument_Malfunction', 'Column_Issue'], 100, p=[0.5, 0.3, 0.2])})
-    
+
     backlog_vals = 10 + np.arange(104)*0.5 + np.random.normal(0, 5, 104) + np.sin(np.arange(104)/8)*5
     backlog_df = pd.DataFrame({'Week': pd.date_range('2022-01-01', periods=104, freq='W'), 'Backlog': backlog_vals.clip(min=0)})
-    
+
     maintenance_df = pd.DataFrame({'Run_Hours': np.random.randint(50, 1000, 100), 'Pressure_Spikes': np.random.randint(0, 20, 100), 'Column_Age_Days': np.random.randint(10, 300, 100)}); maintenance_df['Needs_Maint'] = (maintenance_df['Run_Hours'] > 600) | (maintenance_df['Pressure_Spikes'] > 15) | (maintenance_df['Column_Age_Days'] > 250)
 
     # --- Data for QBD & QUALITY SYSTEMS HUB ---
@@ -191,7 +191,7 @@ def plot_cpk_analysis(df):
     data = df['Titer']; LSL, USL, target = 48.0, 52.0, 50.0; mu, std = data.mean(), data.std(ddof=1)
     cpk, cp, pp, ppk = 0,0,0,0
     if std > 0: cpk = min((USL - mu) / (3 * std), (mu - LSL) / (3 * std)); cp = (USL - LSL) / (6*std); pp = (USL-LSL)/(6*np.sqrt(np.mean((data-mu)**2))); ppk = min((USL-mu)/(3*np.sqrt(np.mean((data-mu)**2))), (mu-LSL)/(3*np.sqrt(np.mean((data-mu)**2))))
-    
+
     col1, col2 = st.columns([2,1])
     with col1:
         fig = go.Figure(go.Histogram(x=data, name='Observed Data', histnorm='probability density', marker_color=PRIMARY_COLOR, opacity=0.7)); x_fit = np.linspace(data.min(), data.max(), 200); y_fit = stats.norm.pdf(x_fit, mu, std); fig.add_trace(go.Scatter(x=x_fit, y=y_fit, mode='lines', name='Fitted Normal', line=dict(color=SUCCESS_GREEN, width=2)))
@@ -224,9 +224,12 @@ def plot_hotelling_t2_chart(df):
 
 def plot_p_chart(df):
     render_full_chart_briefing(context="Monitoring the proportion of monthly HPLC System Suitability Tests (SSTs) that fail.", significance="Tracks the failure rate of a key quality system when the number of tests performed each month varies. It provides a high-level view of the health and reliability of an entire analytical system.", regulatory="Directly supports quality system monitoring as required by **21 CFR 211** and **EudraLex Vol. 4**. Tracking SST failures is a critical component of laboratory control and data integrity (**ALCOA+**).")
-    df['proportion'] = df['SSTs_Failed'] / df['SSTs_Run']; p_bar = df['SSTs_Failed'].sum() / df['SSTs_Run'].sum(); df['UCL'] = p_bar + 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run']); 
+    df['proportion'] = df['SSTs_Failed'] / df['SSTs_Run']; p_bar = df['SSTs_Failed'].sum() / df['SSTs_Run'].sum(); df['UCL'] = p_bar + 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run']);
     df['LCL'] = (p_bar - 3 * np.sqrt(p_bar * (1 - p_bar) / df['SSTs_Run'])).clip(lower=0)
-    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Month'], y=df['proportion'], name='Proportion Failed', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Month'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'))); fig.add_hline(y=p_bar, name='Average Fail Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
+    fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Month'], y=df['proportion'], name='Proportion Failed', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Month'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash')))
+    # SME FIX: The Lower Control Limit (LCL) was calculated but not plotted. Added the trace for a complete chart.
+    fig.add_trace(go.Scatter(x=df['Month'], y=df['LCL'], name='LCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'), showlegend=False))
+    fig.add_hline(y=p_bar, name='Average Fail Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
     fig.update_layout(title='<b>p-Chart for System Suitability Test (SST) Failure Rate</b>', yaxis_title='Proportion of SSTs Failed', yaxis_tickformat=".1%")
     st.plotly_chart(fig, use_container_width=True)
     st.error("**Actionable Insight:** The p-chart reveals a statistically significant spike in the SST failure rate in October, breaching the UCL. This indicates a special cause of variation. **Decision:** Launch an investigation focused on events in October. Review all column changes, mobile phase preparations, and instrument maintenance records from that period to find the root cause.")
@@ -238,7 +241,12 @@ def plot_np_chart(df):
     p_bar = df['Defective_Vials'].sum() / (len(df) * n)
     ucl = n * p_bar + 3 * np.sqrt(n * p_bar * (1-p_bar))
     lcl = max(0, n * p_bar - 3 * np.sqrt(n * p_bar * (1-p_bar)))
-    fig = go.Figure(go.Scatter(x=df['Week'], y=df['Defective_Vials'], mode='lines+markers')); fig.add_hline(y=ucl, line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=lcl, line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=n*p_bar, line_dash='dot', line_color=SUCCESS_GREEN)
+    # SME FIX: Refactored chart creation for clarity and to add a complete legend.
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df['Week'], y=df['Defective_Vials'], name='Defective Vials', mode='lines+markers'))
+    fig.add_hline(y=ucl, name='UCL', line_dash='dash', line_color=ERROR_RED)
+    fig.add_hline(y=lcl, name='LCL', line_dash='dash', line_color=ERROR_RED)
+    fig.add_hline(y=n*p_bar, name='Center Line', line_dash='dot', line_color=SUCCESS_GREEN)
     fig.add_annotation(x=12, y=7, text="<b>Spike Detected</b>", bgcolor=ERROR_RED, font_color='white')
     fig.update_layout(title='<b>np-Chart for Number of Defective Vials per Batch</b>', yaxis_title='Count of Defective Vials (n=50)', xaxis_title='Week')
     st.plotly_chart(fig, use_container_width=True)
@@ -247,7 +255,12 @@ def plot_np_chart(df):
 def plot_c_chart(df):
     render_full_chart_briefing(context="Monitoring the number of bioburden colonies found per environmental monitoring (EM) plate placed in a critical Grade A area.", significance="Tracks the level of microbiological control in a cleanroom. An out-of-control signal is a direct indicator of a potential contamination event that could impact product sterility and patient safety.", regulatory="Directly supports compliance with **EudraLex Vol. 4, Annex 1** (Manufacture of Sterile Medicinal Products) and **ISO 14644**. It provides objective evidence that the classified environment is being maintained in a state of control as required by **21 CFR 211.113**.")
     c_bar = df['Contaminants_per_Plate'].mean(); ucl = c_bar + 3 * np.sqrt(c_bar); lcl = max(0, c_bar - 3 * np.sqrt(c_bar))
-    fig = go.Figure(go.Scatter(x=df['Week'], y=df['Contaminants_per_Plate'], mode='lines+markers')); fig.add_hline(y=ucl, line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=lcl, line_dash='dash', line_color=ERROR_RED); fig.add_hline(y=c_bar, line_dash='dot', line_color=SUCCESS_GREEN)
+    # SME FIX: Refactored chart creation for clarity and to add a complete legend.
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df['Week'], y=df['Contaminants_per_Plate'], name='Contaminants', mode='lines+markers'))
+    fig.add_hline(y=ucl, name='UCL', line_dash='dash', line_color=ERROR_RED)
+    fig.add_hline(y=lcl, name='LCL', line_dash='dash', line_color=ERROR_RED)
+    fig.add_hline(y=c_bar, name='Center Line', line_dash='dot', line_color=SUCCESS_GREEN)
     fig.add_annotation(x=15, y=9, text="<b>Spike Detected</b>", bgcolor=ERROR_RED, font_color='white')
     fig.update_layout(title='<b>c-Chart for Environmental Monitoring (Bioburden)</b>', yaxis_title='Colony Count per Plate', xaxis_title='Week')
     st.plotly_chart(fig, use_container_width=True)
@@ -258,6 +271,8 @@ def plot_u_chart(df):
     df['defects_per_unit'] = df['Particulate_Defects'] / df['Vials_Inspected']; u_bar = df['Particulate_Defects'].sum() / df['Vials_Inspected'].sum(); df['UCL'] = u_bar + 3 * np.sqrt(u_bar / df['Vials_Inspected']);
     df['LCL'] = (u_bar - 3 * np.sqrt(u_bar / df['Vials_Inspected'])).clip(lower=0)
     fig = go.Figure(); fig.add_trace(go.Scatter(x=df['Batch'], y=df['defects_per_unit'], name='Defect Rate', mode='lines+markers')); fig.add_trace(go.Scatter(x=df['Batch'], y=df['UCL'], name='UCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'))); fig.add_hline(y=u_bar, name='Average Defect Rate', line=dict(color=SUCCESS_GREEN, dash='dot'))
+    # SME FIX: The Lower Control Limit (LCL) was calculated but not plotted. Added the trace for a complete chart.
+    fig.add_trace(go.Scatter(x=df['Batch'], y=df['LCL'], name='LCL (Varying)', mode='lines', line=dict(color=ERROR_RED, dash='dash'), showlegend=False))
     fig.add_annotation(x=11, y=df['defects_per_unit'].iloc[10], text="<b>Spike Detected</b>", bgcolor=ERROR_RED, font_color='white')
     fig.update_layout(title='<b>u-Chart for Particulate Defect Rate per Vial</b>', yaxis_title='Defects per Vial', xaxis_title='Batch Number')
     st.plotly_chart(fig, use_container_width=True)
@@ -279,7 +294,7 @@ def plot_stability_analysis(df):
 
 def render_doe_suite(screening_df, doe_df):
     render_full_chart_briefing(context="Developing a new HPLC purity method from first principles, following Quality by Design (QbD).", significance="A strategic, two-phase approach to method development. The Screening phase efficiently identifies the few critical parameters ('vital few') from the many potential ones ('trivial many'). The Optimization phase then precisely models the behavior of those critical parameters to define a robust operating space.", regulatory="This structured approach is the core principle of **ICH Q8(R2)** and **ICH Q14**. It moves beyond trial-and-error, creating a deep process understanding that is highly valued by regulatory agencies.")
-    
+
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Phase 1: Screening Design")
@@ -292,10 +307,10 @@ def render_doe_suite(screening_df, doe_df):
         feature_names = ['pH', 'Gradient_Slope']
         poly = PolynomialFeatures(degree=2); X_poly = poly.fit_transform(doe_df[feature_names]); model = LinearRegression().fit(X_poly, doe_df['Peak_Resolution'])
         x = np.linspace(-1, 1, 30); y = np.linspace(-1, 1, 30); x_grid, y_grid = np.meshgrid(x, y)
-        
+
         grid_df = pd.DataFrame(np.c_[x_grid.ravel(), y_grid.ravel()], columns=feature_names)
         X_pred_poly = poly.transform(grid_df)
-        
+
         z_grid = model.predict(X_pred_poly).reshape(x_grid.shape)
         fig_rsm = go.Figure(data=[go.Contour(z=z_grid, x=x, y=y, colorscale='viridis', contours=dict(coloring='heatmap', showlabels=True))]); fig_rsm.add_shape(type="rect", x0=-0.5, y0=-0.7, x1=0.5, y1=0.7, line=dict(color="white", width=3, dash="dot"), fillcolor="rgba(255,255,255,0.3)"); fig_rsm.add_annotation(x=0, y=0, text="<b>MODR</b>", font=dict(color='white', size=16), showarrow=False); fig_rsm.update_layout(title="<b>Optimization: Defining the MODR</b>", xaxis_title="pH (Normalized)", yaxis_title="Gradient Slope (Normalized)")
         st.plotly_chart(fig_rsm, use_container_width=True)
@@ -335,14 +350,14 @@ def run_oos_prediction_model(df):
 
 def plot_backlog_forecast(df):
     render_full_chart_briefing(context="The AD Ops leader needs to plan resource allocation (headcount, instrument time) for the upcoming quarters.", significance="Moves planning from reactive to proactive. By forecasting the future sample backlog, a leader can provide data-driven justification for hiring new staff or purchasing new equipment *before* the lab becomes a bottleneck to the entire R&D organization.", regulatory="While not a direct compliance requirement, this demonstrates strong resource and capacity planning, a key competency for laboratory management under quality systems like **ISO 17025** and general GxP.")
-    
+
     model = SimpleExpSmoothing(df['Backlog'], initialization_method="estimated").fit()
     forecast = model.forecast(26) # Forecast 6 months (26 weeks)
-    
+
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df['Week'], y=df['Backlog'], name='Historical Backlog', line=dict(color=PRIMARY_COLOR)))
     fig.add_trace(go.Scatter(x=forecast.index, y=forecast, name='Forecasted Backlog', line=dict(color=ERROR_RED, dash='dash')))
-    
+
     st.plotly_chart(fig, use_container_width=True)
     st.error(f"**Actionable Insight:** The time series forecast predicts that the sample backlog will exceed **{forecast.iloc[-1]:.0f} samples** within the next 6 months. This trend is unsustainable with the current staffing level. **Decision:** Submit a formal headcount request for one additional Research Associate, using this forecast as the primary data-driven justification.")
 
@@ -356,7 +371,7 @@ def run_hplc_maintenance_model(df):
     model = get_maint_model(df)
     col1, col2, col3 = st.columns(3); hours = col1.slider("Total Run Hours", 50, 1000, 750); spikes = col2.slider("Pressure Spikes >100psi", 0, 20, 18); age = col3.slider("Column Age (Days)", 10, 300, 280)
     input_df = pd.DataFrame([[hours, spikes, age]], columns=['Run_Hours', 'Pressure_Spikes', 'Column_Age_Days']); pred_prob = model.predict_proba(input_df)[0][1]
-    
+
     colA, colB = st.columns([1,2])
     with colA:
         fig = go.Figure(go.Indicator(mode = "gauge+number", value = pred_prob * 100, title = {'text': "Maintenance Risk Score"}, gauge = {'axis': {'range': [None, 100]}, 'bar': {'color': ERROR_RED if pred_prob > 0.7 else WARNING_AMBER if pred_prob > 0.4 else SUCCESS_GREEN}}))
@@ -366,11 +381,11 @@ def run_hplc_maintenance_model(df):
         st.subheader("Explainable AI (XAI): Why this score?")
         st.info("This SHAP plot shows which factors are pushing the risk score higher (red) or lower (blue). The size of the bar indicates the magnitude of the factor's impact.")
         explainer = shap.TreeExplainer(model)
-        
+
         # SME FIX: The SHAP version in the environment requires an explicit, multi-argument call for force_plot,
         # treating the binary classifier as a multi-output model. This code adheres strictly to the API
         # recommended by the error message.
-        
+
         # Pass the base value for class 1, the SHAP values for class 1, and the feature DataFrame.
         # The force_plot function will correctly render the plot for the first (and only) instance.
         st_shap(shap.force_plot(explainer.expected_value[1], explainer.shap_values(input_df)[1], input_df), height=150)
@@ -396,10 +411,10 @@ def render_method_v_model():
 
 def run_interactive_rca_fishbone():
     render_full_chart_briefing(context="An Out-of-Specification (OOS) result for purity has been confirmed, and a formal laboratory investigation has been launched.", significance="A structured RCA tool like a Fishbone diagram prevents 'tunnel vision' during an investigation. It forces the team to consider a wide range of potential causes across different categories, leading to a more thorough and accurate root cause determination.", regulatory="Using a formal RCA tool is a best practice for OOS investigations, as required by **21 CFR 211.192**. It provides documented, objective evidence that the investigation was systematic and not just a cursory check.")
-    
+
     st.subheader("Fishbone Diagram for OOS Investigation")
     st.info("This tool structures the brainstorming process for a root cause analysis investigation.")
-    
+
     causes = {
         'Man (Analyst)': ['Inadequate training', 'Improper sample preparation', 'Calculation error'],
         'Machine (Instrument)': ['Leaky pump seal', 'Detector lamp aging', 'Incorrect injection volume'],
@@ -408,7 +423,7 @@ def run_interactive_rca_fishbone():
         'Measurement': ['Integration parameters incorrect', 'Calibration curve expired', 'Wrong standard concentration used'],
         'Environment': ['Lab temperature out of range', 'Vibration near balance', 'Power fluctuation']
     }
-    
+
     cols = st.columns(3)
     categories = list(causes.keys())
     for i, cat in enumerate(categories):
@@ -533,8 +548,8 @@ selection = st.sidebar.radio("Go to", list(PAGES.keys()))
 
 # --- Retrieve Data ---
 (
-    budget_df, team_df, lj_df, ewma_df, cusum_df, zone_df, imr_df, 
-    cpk_df, t2_df, p_df, np_df, c_df, u_df, stability_df, tost_df, 
+    budget_df, team_df, lj_df, ewma_df, cusum_df, zone_df, imr_df,
+    cpk_df, t2_df, p_df, np_df, c_df, u_df, stability_df, tost_df,
     screening_df, doe_df, oos_df, backlog_df, maintenance_df, sankey_df
 ) = generate_master_data()
 
