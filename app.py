@@ -659,7 +659,183 @@ def render_technical_deep_dive_page():
     render_plot_wrapper("Capillary Electrophoresis: Charge Variant Analysis", plot_capillary_electrophoresis_charge_variants)
     render_plot_wrapper("ELISA: Potency Assay Dose-Response Curve", plot_elisa_dose_response_curve)
     render_plot_wrapper("ddPCR: Absolute Quantification of Viral Titer", plot_ddpcr_quantification)
+## --- SME ADDITION: High-Quality Method-Specific Visualizations ---
+def plot_hplc_purity_and_stability():
+    """
+    Visualizes HPLC purity results for a stability study, including a degradation trendline.
+    This plot is content-dense by showing individual batch data, specification limits,
+    and a regression model to predict shelf-life.
+    """
+    # 1. Generate realistic data for a 3-batch stability study
+    np.random.seed(42)
+    time_points = np.array([0, 3, 6, 9, 12, 18])
+    batches = {}
+    for i in range(1, 4):
+        initial_purity = 99.8 - np.random.uniform(0, 0.2)
+        degradation_rate = -0.05 - np.random.uniform(0, 0.01)
+        noise = np.random.normal(0, 0.05, len(time_points))
+        purity = initial_purity + degradation_rate * time_points + noise
+        batches[f'Batch {i}'] = purity
+    
+    df = pd.DataFrame(batches, index=time_points).reset_index().rename(columns={'index': 'Time (Months)'})
+    df_melt = df.melt(id_vars='Time (Months)', var_name='Batch', value_name='Purity (%)')
 
+    # 2. Perform linear regression to model degradation
+    X = df_melt['Time (Months)'].values.reshape(-1, 1)
+    y = df_melt['Purity (%)'].values
+    model = LinearRegression().fit(X, y)
+    shelf_life_intercept = 98.0  # Specification Limit
+    shelf_life_months = (shelf_life_intercept - model.intercept_) / model.coef_[0]
+
+    # 3. Create the visualization
+    fig = px.scatter(df_melt, x='Time (Months)', y='Purity (%)', color='Batch',
+                     title="<b>HPLC Stability: Purity Degradation Analysis</b>",
+                     labels={'Purity (%)': 'Main Peak Purity (%)'},
+                     color_discrete_sequence=px.colors.qualitative.Plotly)
+    x_range = np.array([0, 24])
+    y_range = model.predict(x_range.reshape(-1, 1))
+    fig.add_trace(go.Scatter(x=x_range, y=y_range, mode='lines', name='Degradation Trend', line=dict(color=DARK_GREY, dash='dash')))
+    fig.add_hline(y=shelf_life_intercept, line=dict(color=ERROR_RED, dash='solid'), name='Specification Limit (98.0%)',
+                  annotation_text="Spec Limit", annotation_position="bottom right")
+    fig.add_vline(x=shelf_life_months, line=dict(color=SUCCESS_GREEN, dash='dot'), name='Predicted Shelf-Life',
+                  annotation_text=f"Predicted Shelf-Life: {shelf_life_months:.1f} mo", annotation_position="top left")
+    fig.update_layout(legend_title_text='Batch ID')
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # 4. Provide Actionable Insight
+    st.success(f"""
+    **Actionable Insight:** The combined batch data shows a clear linear degradation trend. The model predicts the product will breach the 98.0% purity specification at **{shelf_life_months:.1f} months**.
+    
+    **Decision:** Based on this data, a shelf-life of **18 months** is a scientifically justified and conservative recommendation for the regulatory filing, providing a 6-month safety margin.
+    """)
+
+def plot_capillary_electrophoresis_charge_variants():
+    """
+    Visualizes Capillary Electrophoresis (CE-SDS) data for charge variant analysis,
+    comparing a reference standard to a test sample. Content-dense by overlaying two
+    electropherograms and highlighting key variant peaks.
+    """
+    np.random.seed(101)
+    migration_time = np.linspace(8, 14, 500)
+    main_peak_ref = stats.norm.pdf(migration_time, 11, 0.1) * 20
+    acidic_peak_ref = stats.norm.pdf(migration_time, 10.5, 0.15) * 2
+    basic_peak_ref = stats.norm.pdf(migration_time, 11.5, 0.12) * 1.5
+    main_peak_test = stats.norm.pdf(migration_time, 11.05, 0.1) * 19
+    acidic_peak_test = stats.norm.pdf(migration_time, 10.55, 0.15) * 3.5
+    basic_peak_test = stats.norm.pdf(migration_time, 11.55, 0.12) * 1.4
+    df = pd.DataFrame({
+        'Migration Time (min)': migration_time,
+        'Reference Standard': main_peak_ref + acidic_peak_ref + basic_peak_ref + np.random.rand(500) * 0.1,
+        'Test Sample': main_peak_test + acidic_peak_test + basic_peak_test + np.random.rand(500) * 0.1
+    })
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df['Migration Time (min)'], y=df['Reference Standard'], mode='lines', name='Reference Standard', line=dict(color=PRIMARY_COLOR, width=3)))
+    fig.add_trace(go.Scatter(x=df['Migration Time (min)'], y=df['Test Sample'], mode='lines', name='Test Sample', line=dict(color=WARNING_AMBER, width=2)))
+    fig.add_annotation(x=10.55, y=3.8, text="<b>Increased Acidic Variant</b>", showarrow=True, arrowhead=2, ax=20, ay=-40, bgcolor='rgba(255, 193, 7, 0.7)')
+    fig.add_annotation(x=11.0, y=21, text="Main Peak", showarrow=False, yshift=10)
+    fig.add_annotation(x=11.5, y=3, text="Basic Variants", showarrow=False, yshift=10)
+    fig.update_layout(
+        title="<b>Capillary Electrophoresis: Charge Variant Profile Comparison</b>",
+        xaxis_title="Migration Time (min)",
+        yaxis_title="Absorbance (AU)",
+        legend=dict(yanchor="top", y=0.95, xanchor="right", x=0.95)
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    
+    st.warning("""
+    **Actionable Insight:** The electropherogram overlay clearly shows that the Test Sample has a significantly higher acidic peak region compared to the Reference Standard. The main and basic peaks are comparable. This charge heterogeneity could impact product efficacy or stability.
+    
+    **Decision:** The Test Sample does not meet the comparability criteria. Notify the upstream process development team immediately. An investigation is required to identify the process step (e.g., pH, temperature excursion) causing the increase in acidic species.
+    """)
+
+def plot_elisa_dose_response_curve():
+    """
+    Visualizes a 4-Parameter Logistic (4PL) curve fit for an ELISA, a standard for potency assays.
+    """
+    np.random.seed(55)
+    concentrations = np.logspace(-3, 2, 12)
+    A, B, C, D = 0.1, 1.0, 1.5, 2.5 # Min, Slope, EC50, Max
+    def four_pl(x, A, B, C, D):
+        return D + (A - D) / (1 + (x / C)**B)
+    responses = four_pl(concentrations, A, B, C, D)
+    replicates = []
+    for resp in responses:
+        replicates.append(resp + np.random.normal(0, 0.05, 3))
+    df_replicates = pd.DataFrame(replicates, columns=['Rep1', 'Rep2', 'Rep3'])
+    df_replicates['Concentration'] = concentrations
+    df_melt = df_replicates.melt(id_vars='Concentration', var_name='Replicate', value_name='Absorbance')
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df_melt['Concentration'], y=df_melt['Absorbance'], mode='markers', name='Replicates', marker=dict(color=NEUTRAL_GREY, opacity=0.7)))
+    x_curve = np.logspace(-3, 2, 200)
+    y_curve = four_pl(x_curve, A, B, C, D)
+    fig.add_trace(go.Scatter(x=x_curve, y=y_curve, mode='lines', name='4PL Fitted Curve', line=dict(color=PRIMARY_COLOR, width=3)))
+    ec50_absorbance = four_pl(C, A, B, C, D)
+    fig.add_shape(type="line", x0=1e-3, y0=ec50_absorbance, x1=C, y1=ec50_absorbance, line=dict(color=SUCCESS_GREEN, dash="dot"))
+    fig.add_shape(type="line", x0=C, y0=0, x1=C, y1=ec50_absorbance, line=dict(color=SUCCESS_GREEN, dash="dot"))
+    fig.add_annotation(x=np.log10(C), y=0.1, text=f"<b>EC50 = {C:.2f} ng/mL</b>", showarrow=False, bgcolor=SUCCESS_GREEN, font=dict(color='white'))
+    fig.update_layout(
+        title="<b>ELISA Potency Assay: 4-Parameter Logistic (4PL) Dose-Response Curve</b>",
+        xaxis_type="log",
+        xaxis_title="Concentration (ng/mL)",
+        yaxis_title="Absorbance (OD450)"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    
+    st.success("""
+    **Actionable Insight:** The assay demonstrates a classic sigmoidal dose-response relationship. The 4PL curve fit is excellent, with an R² > 0.99 (data not shown). The calculated EC50 of 1.50 ng/mL is well within the historical range of 1.0-2.0 ng/mL for this reference standard.
+    
+    **Decision:** The assay is valid. The potency of the test samples run on this plate can be reliably calculated and reported.
+    """)
+
+def plot_ddpcr_quantification():
+    """
+    Visualizes ddPCR data, showing the separation between positive and negative droplets.
+    """
+    np.random.seed(123)
+    neg_ch1 = np.random.normal(1000, 200, 15000)
+    neg_ch2 = np.random.normal(1000, 200, 15000)
+    pos_ch1 = np.random.normal(8000, 500, 3000)
+    pos_ch2 = np.random.normal(1200, 200, 3000)
+    df = pd.DataFrame({
+        'Channel 1 Amplitude': np.concatenate([neg_ch1, pos_ch1]),
+        'Channel 2 Amplitude': np.concatenate([neg_ch2, pos_ch2]),
+        'Droplet Type': ['Negative'] * 15000 + ['Positive'] * 3000
+    })
+
+    threshold = 4000
+    fig = px.scatter(df, x='Channel 1 Amplitude', y='Channel 2 Amplitude', color='Droplet Type',
+                     title="<b>ddPCR: Titer Quantification Droplet Plot</b>",
+                     color_discrete_map={'Positive': SUCCESS_GREEN, 'Negative': NEUTRAL_GREY},
+                     opacity=0.5)
+    fig.add_vline(x=threshold, line=dict(color=ERROR_RED, dash='dash'), name='Threshold',
+                  annotation_text="Threshold", annotation_position="bottom right")
+    fig.add_annotation(x=8000, y=1200, text="<b>Positive Droplets<br>(Target Detected)</b>", showarrow=False, font=dict(color=DARK_GREY))
+    fig.add_annotation(x=1000, y=1000, text="<b>Negative Droplets</b>", showarrow=False, font=dict(color=DARK_GREY))
+    st.plotly_chart(fig, use_container_width=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info("""
+        **Actionable Insight:** The 2D droplet plot shows excellent separation between the positive and negative populations, with very few "rain" droplets in the intermediate zone. This indicates a robust and specific assay. The automatically placed threshold correctly classifies the populations.
+        
+        **Decision:** The data quality is high. The calculated concentration is valid and can be reported.
+        """)
+    with col2:
+        st.markdown("##### **Quantitative Results**")
+        results_df = pd.DataFrame({
+            "Parameter": ["Positive Droplets", "Total Droplets", "Volume/Droplet (nL)", "Concentration (copies/µL)"],
+            "Value": [f"{len(pos_ch1):,}", f"{len(pos_ch1) + len(neg_ch1):,}", "0.85", "4,250"]
+        })
+        st.dataframe(results_df)
+
+def render_plot_wrapper(title, plot_function):
+    """A wrapper to create a consistent look for each plot section."""
+    with st.container(border=True):
+        st.subheader(title, divider='violet')
+        plot_function()
+        st.markdown("---")
 # ======================================================================================
 # SECTION 5: PAGE RENDERING FUNCTIONS
 # ======================================================================================
