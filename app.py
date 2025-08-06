@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v13.6 - Final, Complete with Technical Deep Dive
+# v14.0 - Final, Feature-Complete & Fully Restored Version
 # ======================================================================================
 
 import streamlit as st
@@ -318,7 +318,6 @@ def plot_zone_chart(df):
     fig.update_layout(title="<b>Zone Chart for Seal Strength with Sensitizing Rules</b>", yaxis_title="Seal Strength (N)", xaxis_title="Sample Number")
     st.plotly_chart(fig, use_container_width=True)
     st.warning("**Actionable Insight:** Although no single point is out of control, the Zone Chart detected a run of 8 consecutive points below the center line. This non-random pattern indicates a systematic process shift. **Decision:** This early warning triggers an investigation into potential causes like equipment wear or material changes during the next planned maintenance cycle.")
-
 def plot_i_mr_chart(df):
     render_full_chart_briefing(context="Monitoring individual measurements where assessing both process mean and variability is critical.", significance="This enhanced I-MR chart automatically applies and visualizes Nelson Rules, detecting non-random patterns (like trends or shifts) within control limits that would be missed by simple UCL/LCL breaches, providing an earlier warning of process instability.", regulatory="Goes beyond basic SPC to demonstrate a mature process monitoring program. Using sensitizing rules like Nelson Rules is a best practice for Continued Process Verification (**FDA Guidance**) and demonstrates a proactive approach to quality management (**ICH Q10**).")
     i_data = df['Purity']
@@ -541,7 +540,6 @@ def plot_method_equivalency_tost(df):
         st.success("**Actionable Insight:** The 90% confidence interval for the mean difference is fully contained within the equivalence limits, proving equivalency. The Bland-Altman plot shows no discernible trend, confirming the bias is consistent across the analytical range. **Decision:** The UPLC method is equivalent. Initiate change control to replace the HPLC method.")
     else:
         st.error("**Actionable Insight:** Equivalence has not been demonstrated. The Bland-Altman plot should be examined to see if the failure is due to a consistent bias or a magnitude-dependent issue. **Decision:** Do not replace the method. Investigate the source of the bias.")
-
 @st.cache_resource
 def get_oos_rca_model(_df):
     df_encoded = pd.get_dummies(_df, columns=['Instrument', 'Analyst', 'Molecule_Type'])
@@ -771,7 +769,6 @@ def render_lifecycle_hub_page(stability_df, tost_df, screening_df, doe_df, trans
     st.title("Method & Product Lifecycle Hub")
     render_manager_briefing(title="Guiding Methods from R&D to Commercial Launch", content="This hub demonstrates the strategic oversight of the entire analytical and product lifecycle, from initial development using QbD principles to post-approval changes and stability monitoring.", reg_refs="ICH Q1E, Q12, Q8/Q14", business_impact="Creates robust methods that are fit for purpose, accelerates development timelines, and simplifies post-approval changes by building deep process understanding.", quality_pillar="Lifecycle Management & Scientific Rigor.", risk_mitigation="Front-loads risk management into the development phase, reducing the likelihood of late-stage failures during validation or routine use.")
     st.subheader("Early-Stage: Quality by Design (QbD) for Method Development", divider='violet'); render_doe_suite(screening_df, doe_df)
-    
     st.subheader("Method Validation & Robustness Summary", divider='violet')
     render_full_chart_briefing(
         context="Before a method can be transferred or used for GxP testing, it must be formally validated to demonstrate it is fit for purpose.",
@@ -784,7 +781,6 @@ def render_lifecycle_hub_page(stability_df, tost_df, screening_df, doe_df, trans
     summary['Status Icon'] = summary['Status'].apply(lambda x: '✅' if x else '❌')
     summary['Overall Status'] = summary['Status'].apply(lambda x: 'Validated' if x else 'Validation Failed')
     st.dataframe(summary[['Method', 'Overall Status', 'Status Icon']], use_container_width=True, hide_index=True)
-
     st.subheader("Method Transfer Readiness Dashboard (AD to QC)", divider='violet')
     render_full_chart_briefing(context="As the 'Sending Unit', AD Ops is responsible for ensuring a seamless and successful transfer of validated methods to the 'Receiving Unit' (QC).", significance="This dashboard provides a real-time, task-level view of all ongoing method transfers. It allows for proactive risk identification and resource allocation to prevent delays in program timelines.", regulatory="A well-documented and controlled method transfer process is a critical component of **ICH Q10** and is essential for maintaining a state of cGMP compliance.")
     program_to_view = st.selectbox("Select Program to View Transfer Status:", transfer_data['Program'].unique())
@@ -802,7 +798,6 @@ def render_lifecycle_hub_page(stability_df, tost_df, screening_df, doe_df, trans
 def render_predictive_hub_page(oos_df, backlog_df, maintenance_df, automation_candidates):
     st.title("Predictive Operations & Diagnostics")
     render_manager_briefing(title="Building a Proactive, Data-Driven Operations Function", content="This hub showcases a forward-looking leadership approach that uses data science and machine learning to move from reactive problem-solving to proactive planning and risk mitigation.", reg_refs="ICH Q9, FDA's CSA Guidance", business_impact="Maximizes instrument uptime, accelerates investigations, and allows for data-driven resource planning, ultimately reducing operational costs and timelines.", quality_pillar="Predictive Analytics & Continuous Improvement.", risk_mitigation="Anticipates future bottlenecks, equipment failures, and quality issues before they can impact the organization.")
-    
     tab1, tab2, tab3 = st.tabs(["**📈 Proactive Planning**", "**🔬 Predictive Diagnostics**", "**🤖 Automation Pipeline**"])
     with tab1:
         st.subheader("Proactive Resource & Maintenance Planning")
@@ -826,6 +821,28 @@ def render_qbd_quality_systems_hub_page(sankey_df):
     render_manager_briefing(title="Integrating Quality Systems into Analytical Development", content="This hub demonstrates a deep understanding of modern quality systems and how to embed them into the daily work of an analytical development lab, ensuring compliance and scientific excellence.", reg_refs="ICH Q8, Q9, Q10; 21 CFR 820.30; 21 CFR 211.192", business_impact="Creates more robust methods, reduces validation failures, and ensures investigations are thorough, compliant, and effective.", quality_pillar="Proactive Quality & Systematic Problem Solving.", risk_mitigation="Moves the function from a 'test-and-fix' mentality to a 'design-and-understand' paradigm, reducing overall compliance risk.")
     st.subheader("Proactive Quality by Design (QbD) & Design Controls", divider='violet'); render_qbd_sankey_chart(sankey_df); render_method_v_model()
     st.subheader("Reactive Problem Solving & Root Cause Analysis (RCA)", divider='violet'); run_interactive_rca_fishbone(); render_troubleshooting_flowchart()
+
+def render_technical_deep_dive_page():
+    st.title("Technical Deep Dive: Key Analytical Methods")
+    render_manager_briefing(
+        title="Demonstrating Hands-On Technical Proficiency",
+        content="This hub showcases detailed, content-rich visualizations for the key analytical techniques used to characterize biotechnology products. Each plot demonstrates not only the ability to generate data, but also to analyze it, interpret its meaning, and make sound scientific and business decisions based on the results.",
+        reg_refs="ICH Q2(R1), ICH Q6B",
+        business_impact="Ensures that all analytical data supporting process development and product characterization is robust, reliable, and defensible.",
+        quality_pillar="Scientific Rigor & Data Integrity.",
+        risk_mitigation="Early and accurate identification of product quality attribute shifts or assay performance issues."
+    )
+    def render_plot_wrapper(title, plot_function):
+        with st.container(border=True):
+            st.subheader(title, divider='violet')
+            plot_function()
+            st.markdown("---")
+            
+    render_plot_wrapper("HPLC: Stability Analysis & Shelf-Life Prediction", plot_hplc_purity_and_stability)
+    render_plot_wrapper("Capillary Electrophoresis: Charge Variant Analysis", plot_capillary_electrophoresis_charge_variants)
+    render_plot_wrapper("ELISA: Potency Assay Dose-Response Curve", plot_elisa_dose_response_curve)
+    render_plot_wrapper("ddPCR: Absolute Quantification of Viral Titer", plot_ddpcr_quantification)
+
 # ======================================================================================
 # SECTION 6: MAIN APP ROUTER (SIDEBAR NAVIGATION)
 # ======================================================================================
@@ -862,3 +879,4 @@ elif selection == "Technical Deep Dive":
 
 st.sidebar.markdown("---"); st.sidebar.markdown("### Role Focus"); st.sidebar.info("This portfolio is for an **Associate Director, Analytical Development Operations** role, demonstrating leadership in building high-throughput testing functions, managing the method lifecycle, and applying advanced statistical methods."); st.sidebar.markdown("---"); st.sidebar.markdown("### Key Regulatory & Quality Frameworks")
 with st.sidebar.expander("View Applicable Guidelines", expanded=False): st.markdown("- **ICH Q1E, Q2, Q8, Q9, Q10, Q12, Q14**\n- **21 CFR Parts 11, 211, 820.30**\n- **EudraLex Vol. 4, Annex 1 & 15**\n- **ISO 17025, ISO 13485**")
+
