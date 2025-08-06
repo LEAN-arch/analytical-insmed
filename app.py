@@ -1,6 +1,6 @@
 # ======================================================================================
 # ANALYTICAL DEVELOPMENT OPERATIONS COMMAND CENTER
-# v13.5 - Final, Complete & Role-Specific Version
+# v13.6 - Final, Complete with Technical Deep Dive
 # ======================================================================================
 
 import streamlit as st
@@ -344,6 +344,7 @@ def plot_i_mr_chart(df):
     fig.update_layout(height=600, showlegend=False, title_text="<b>I-MR Chart for Reference Standard Purity</b>")
     st.plotly_chart(fig, use_container_width=True)
     st.warning("**Actionable Insight:** Even before any points breached the control limits, the I-chart detected a violation of Nelson Rule #2 (9 consecutive points below the mean), indicating a non-random downward shift. This early warning confirms the reference standard is degrading. **Decision:** Quarantine the current standard and qualify a new one immediately. This proactive measure prevents the generation of invalid data.")
+
 def plot_cpk_analysis(df):
     render_full_chart_briefing(context="Assessing if a validated manufacturing process can reliably meet not just its official specifications, but also its tighter internal 'guard band' limits.", significance="Introduces **Guard-Banded Cpk (Cpk-GB)**, a critical internal metric that measures process capability against tighter, action-oriented limits. This provides an early warning if a process is drifting towards an edge of the specification, even if it's still officially 'in-spec'.", regulatory="Demonstrates a mature, risk-based approach to process control (**ICH Q9**). Maintaining a high Cpk-GB ensures the process stays well within the 'safe' operating space defined in the Design Space (**ICH Q8**), reducing the risk of OOS results.")
     data = df['Titer']
@@ -640,6 +641,27 @@ def render_troubleshooting_flowchart():
     st.graphviz_chart(graph_definition)
     st.success("**Actionable Insight:** An OOS investigation must be a formal, documented process. This flowchart ensures all required steps are taken, from the initial check for simple errors to a full-scale RCA and CAPA implementation. **Decision:** All lab personnel will be retrained on this OOS procedure to ensure consistent and compliant execution.")
 
+def render_technical_deep_dive_page():
+    st.title("Technical Deep Dive: Key Analytical Methods")
+    render_manager_briefing(
+        title="Demonstrating Hands-On Technical Proficiency",
+        content="This hub showcases detailed, content-rich visualizations for the key analytical techniques used to characterize biotechnology products. Each plot demonstrates not only the ability to generate data, but also to analyze it, interpret its meaning, and make sound scientific and business decisions based on the results.",
+        reg_refs="ICH Q2(R1), ICH Q6B",
+        business_impact="Ensures that all analytical data supporting process development and product characterization is robust, reliable, and defensible.",
+        quality_pillar="Scientific Rigor & Data Integrity.",
+        risk_mitigation="Early and accurate identification of product quality attribute shifts or assay performance issues."
+    )
+    def render_plot_wrapper(title, plot_function):
+        with st.container(border=True):
+            st.subheader(title, divider='violet')
+            plot_function()
+            st.markdown("---")
+            
+    render_plot_wrapper("HPLC: Stability Analysis & Shelf-Life Prediction", plot_hplc_purity_and_stability)
+    render_plot_wrapper("Capillary Electrophoresis: Charge Variant Analysis", plot_capillary_electrophoresis_charge_variants)
+    render_plot_wrapper("ELISA: Potency Assay Dose-Response Curve", plot_elisa_dose_response_curve)
+    render_plot_wrapper("ddPCR: Absolute Quantification of Viral Titer", plot_ddpcr_quantification)
+
 # ======================================================================================
 # SECTION 5: PAGE RENDERING FUNCTIONS
 # ======================================================================================
@@ -804,12 +826,18 @@ def render_qbd_quality_systems_hub_page(sankey_df):
     render_manager_briefing(title="Integrating Quality Systems into Analytical Development", content="This hub demonstrates a deep understanding of modern quality systems and how to embed them into the daily work of an analytical development lab, ensuring compliance and scientific excellence.", reg_refs="ICH Q8, Q9, Q10; 21 CFR 820.30; 21 CFR 211.192", business_impact="Creates more robust methods, reduces validation failures, and ensures investigations are thorough, compliant, and effective.", quality_pillar="Proactive Quality & Systematic Problem Solving.", risk_mitigation="Moves the function from a 'test-and-fix' mentality to a 'design-and-understand' paradigm, reducing overall compliance risk.")
     st.subheader("Proactive Quality by Design (QbD) & Design Controls", divider='violet'); render_qbd_sankey_chart(sankey_df); render_method_v_model()
     st.subheader("Reactive Problem Solving & Root Cause Analysis (RCA)", divider='violet'); run_interactive_rca_fishbone(); render_troubleshooting_flowchart()
-
 # ======================================================================================
 # SECTION 6: MAIN APP ROUTER (SIDEBAR NAVIGATION)
 # ======================================================================================
 st.sidebar.title("AD Ops Navigation")
-PAGES = { "Executive & Strategic Hub": render_executive_strategic_hub, "Method & Product Lifecycle Hub": render_lifecycle_hub_page, "Advanced Statistical Toolkit": render_statistical_toolkit_page, "Predictive Operations & Diagnostics": render_predictive_hub_page, "QbD & Quality Systems Hub": render_qbd_quality_systems_hub_page, }
+PAGES = { 
+    "Executive & Strategic Hub": render_executive_strategic_hub, 
+    "Method & Product Lifecycle Hub": render_lifecycle_hub_page, 
+    "Technical Deep Dive": render_technical_deep_dive_page,
+    "Advanced Statistical Toolkit": render_statistical_toolkit_page, 
+    "Predictive Operations & Diagnostics": render_predictive_hub_page, 
+    "QbD & Quality Systems Hub": render_qbd_quality_systems_hub_page, 
+}
 selection = st.sidebar.radio("Go to", list(PAGES.keys()))
 
 (team_df, lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, 
@@ -819,11 +847,18 @@ selection = st.sidebar.radio("Go to", list(PAGES.keys()))
  program_analytical_methods, transfer_data, validation_data, automation_candidates, risk_register_data) = generate_master_data()
 
 page_function = PAGES[selection]
-if selection == "Executive & Strategic Hub": page_function(team_df, tat_data, program_data, tech_roadmap_data, workflow_data, training_data, program_analytical_methods, risk_register_data)
-elif selection == "QbD & Quality Systems Hub": page_function(sankey_df)
-elif selection == "Method & Product Lifecycle Hub": page_function(stability_df, tost_df, screening_df, doe_df, transfer_data, validation_data)
-elif selection == "Predictive Operations & Diagnostics": page_function(oos_df, backlog_df, maintenance_df, automation_candidates)
-elif selection == "Advanced Statistical Toolkit": page_function(lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df)
+if selection == "Executive & Strategic Hub": 
+    page_function(team_df, tat_data, program_data, tech_roadmap_data, workflow_data, training_data, program_analytical_methods, risk_register_data)
+elif selection == "QbD & Quality Systems Hub": 
+    page_function(sankey_df)
+elif selection == "Method & Product Lifecycle Hub": 
+    page_function(stability_df, tost_df, screening_df, doe_df, transfer_data, validation_data)
+elif selection == "Predictive Operations & Diagnostics": 
+    page_function(oos_df, backlog_df, maintenance_df, automation_candidates)
+elif selection == "Advanced Statistical Toolkit": 
+    page_function(lj_df, ewma_df, cusum_df, zone_df, imr_df, cpk_df, t2_df, p_df, np_df, c_df, u_df)
+elif selection == "Technical Deep Dive": 
+    page_function()
 
 st.sidebar.markdown("---"); st.sidebar.markdown("### Role Focus"); st.sidebar.info("This portfolio is for an **Associate Director, Analytical Development Operations** role, demonstrating leadership in building high-throughput testing functions, managing the method lifecycle, and applying advanced statistical methods."); st.sidebar.markdown("---"); st.sidebar.markdown("### Key Regulatory & Quality Frameworks")
 with st.sidebar.expander("View Applicable Guidelines", expanded=False): st.markdown("- **ICH Q1E, Q2, Q8, Q9, Q10, Q12, Q14**\n- **21 CFR Parts 11, 211, 820.30**\n- **EudraLex Vol. 4, Annex 1 & 15**\n- **ISO 17025, ISO 13485**")
